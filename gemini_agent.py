@@ -50,3 +50,30 @@ class GeminiAgent:
         # Note: If automatic function calling isn't enabled by default, you may need a loop.
         
         return {"status": "success", "gemini_response": response.text}
+
+    def generate_cycle_intro(self, cycle_number: int) -> str:
+        """
+        Use Gemini Flash to generate a new thread introduction for the current cycle.
+        """
+
+        prompt = f"""
+Generate an introduction for the "Cycle {cycle_number} - Nominations" Discord thread. 
+
+Example:
+"Hey @Community Seal Updates!  Welcome to Cycle {cycle_number}!  This thread will be used for nominations for Cycle {cycle_number}!  Please read over the rules here and then nominate away!
+
+Rules
+• You may nominate 2 Hero sets and 1 Encounter set"
+
+Output *only* the generated introduction text. Do not wrap it in markdown code blocks unless necessary.
+"""
+        from google.genai import types
+        response = self.client.models.generate_content(
+            model='gemini-flash-latest',
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                temperature=1.2
+            )
+        )
+        return response.text.strip()
+

@@ -5,17 +5,18 @@ Octobot CAS Clerk is an AI-driven Discord bot and webhook listener for a Marvel 
 
 ## Architecture & Core Technologies
 - **Language**: Python 3.9+
-- **Discord Integration**: `discord.py` (Bot client, rate limiting, thread watching, `/cap-report` command)
-- **AI Intelligence**: `google-genai` (using Gemini Flash Latest) to extract intent from natural language.
-- **Backend/Database**: Google Cloud Firestore (using `google-cloud-firestore`), integrated as MCP tools.
+- **Discord Integration**: `discord.py` (Bot client, rate limiting, thread watching, `/cap-report` and `/start-nominations` commands)
+- **AI Intelligence**: `google-genai` (using Gemini Flash Latest) to extract intent from natural language, and generate cycle thread intros.
+- **Backend/Database**: Google Cloud Firestore (using `google-cloud-firestore`), integrated as MCP tools. Uses a `cycle_metadata` document to persist state such as current cycle number and the dynamic `nomination_thread_id`.
 - **Cloud Gateway**: `functions-framework` (entry point `main.py`) for Google Cloud Functions exposing HTTP endpoints.
 
 ## Directory Structure
 - `main.py`: HTTP Cloud Function entry point for webhook payloads.
-- `discord_bot.py`: The async Discord bot client. Listens to a specific thread, rate-limits users (2s cooldown), and dispatches messages to the Gemini agent in a thread pool executor.
-- `gemini_agent.py`: Orchestrates the `google-genai` client. Constructs the system prompt giving the AI rules and injects the Firestore MCP tools.
-- `mcp_firestore.py`: Contains the actual implementation of the tools (e.g., `get_rules`, `get_nominations`, `add_nomination`, `remove_nomination`, `log_error`).
+- `discord_bot.py`: The async Discord bot client. Listens to a specific thread, rate-limits users (2s cooldown), and dispatches messages to the Gemini agent in a thread pool executor. It boots up by reading `cycle_metadata` to find the active thread.
+- `gemini_agent.py`: Orchestrates the `google-genai` client. Constructs the system prompt giving the AI rules, injects the Firestore MCP tools, and contains functionality to prompt the LLM for new thread introductions.
+- `mcp_firestore.py`: Contains the actual implementation of the tools (e.g., `get_rules`, `get_nominations`, `add_nomination`, `remove_nomination`, `log_error`, `get_cycle_metadata`).
 - `cogs/cap_report.py`: A `discord.py` Cog that implements the `/cap-report` slash command to generate a summary of current Hero and Encounter nominations.
+- `cogs/cycle_management.py`: A `discord.py` Cog managing cycle transitions. The `/start-nominations` command clears the old database, increments the cycle, generates an intro with Gemini, creates a new Discord thread, and updates Firestore's `cycle_metadata`.
 - `rules.txt`: Plaintext file injected into the Gemini prompt detailing how to handle edge cases, deduplication, ambiguity, and logging.
 
 ## Core Directives for the Agent
@@ -30,5 +31,5 @@ When modifying this codebase, keep the following architectural constraints in mi
 ## Key Environment Variables
 - `DISCORD_TOKEN`: Discord Bot Token.
 - `GEMINI_API_KEY`: Google Gemini API Key.
-- `NOMINATION_THREAD_ID`: The specific Discord thread ID the bot should monitor.
-- `GOOGLE_APPLICATION_CREDENTIALS`: Implicitly needed for Firestore auth.
+- `CLOUD_FUNCTION_URL`: URL to point webhooks at, if testing local integrations.
+- `GOOGLE_APPLICATION_CREDENTIALS`: Path to the service account JSON needed to connect to Firestore outside of GCP environments.

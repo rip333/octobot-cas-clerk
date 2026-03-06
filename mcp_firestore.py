@@ -62,3 +62,44 @@ class MCPFirestore:
                 return f.read()
         except FileNotFoundError:
             return "Rules document not found."
+
+    def get_cycle_metadata(self) -> dict:
+        """
+        Get the current cycle metadata. Initializes to default if it doesn't exist.
+        """
+        doc_ref = self.db.collection('cycle_metadata').document('current')
+        doc = doc_ref.get()
+        if doc.exists:
+            return doc.to_dict()
+        else:
+            default_data = {
+                "number": 11,
+                "active": True,
+                "nomination_thread_id": 0
+            }
+            doc_ref.set(default_data)
+            return default_data
+
+    def update_cycle_metadata(self, data: dict) -> bool:
+        """
+        Update the cycle metadata document.
+        """
+        doc_ref = self.db.collection('cycle_metadata').document('current')
+        doc_ref.set(data, merge=True)
+        return True
+
+    def clear_nominations(self) -> int:
+        """
+        Delete all documents in the nominations collection.
+        Returns the number of documents deleted.
+        """
+        nominations_ref = self.db.collection('nominations')
+        docs = nominations_ref.stream()
+        
+        deleted_count = 0
+        for doc in docs:
+            doc.reference.delete()
+            deleted_count += 1
+            
+        return deleted_count
+

@@ -1,0 +1,58 @@
+name: Deploy Octobot CAS Clerk
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy-cloud-function:
+    name: Deploy Webhook to GCF
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Deploy Cloud Function
+        uses: google-github-actions/deploy-cloud-functions@v3
+        with:
+          name: handle_nomination_webhook
+          runtime: python39
+          entry_point: handle_nomination_webhook
+          environment_variables: |-
+            DISCORD_TOKEN=${{ secrets.DISCORD_TOKEN }}
+            GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
+            CLOUD_FUNCTION_URL=${{ secrets.CLOUD_FUNCTION_URL }}
+
+      - name: Make Cloud Function Public
+        run: |
+          gcloud functions add-iam-policy-binding handle_nomination_webhook \
+            --region us-central1 \
+            --member "allUsers" \
+            --role "roles/cloudfunctions.invoker"
+
+  deploy-discord-bot:
+    name: Deploy Discord Bot to VM
+    runs-on: ubuntu-latest
+    needs: deploy-cloud-function
+    steps:
+      - name: SSH into VM and Update
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USERNAME }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            cd /opt/octobot-cas-clerk
+            git fetch --all
+            git checkout main
+            git reset --hard origin/main
+            source venv/bin/activate
+            pip install -r requirements.txt
+            sudo systemctl restart octobot.service

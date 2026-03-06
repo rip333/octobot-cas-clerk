@@ -13,7 +13,19 @@ client = commands.Bot(command_prefix="!", intents=intents)
 @client.event
 async def setup_hook():
     await client.load_extension("cogs.cap_report")
+    await client.load_extension("cogs.cycle_management")
     await client.tree.sync()
+    
+    from mcp_firestore import MCPFirestore
+    try:
+        db = MCPFirestore()
+        metadata = db.get_cycle_metadata()
+        target_thread = metadata.get("nomination_thread_id", 0)
+        client.nomination_thread_id = int(target_thread) if target_thread else 0
+        print(f"Loaded target thread ID from DB: {client.nomination_thread_id}")
+    except Exception as e:
+        print(f"Could not load cycle metadata on boot: {e}")
+        client.nomination_thread_id = int(os.getenv("NOMINATION_THREAD_ID", "0"))
 
 @client.event
 async def on_ready():
@@ -35,7 +47,10 @@ async def on_message(message):
         return
 
     # Thread ID check
-    target_thread = int(os.getenv("NOMINATION_THREAD_ID", "0"))
+    target_thread = getattr(client, 'nomination_thread_id', 0)
+    if not target_thread:
+        target_thread = int(os.getenv("NOMINATION_THREAD_ID", "0"))
+
     if target_thread and getattr(message.channel, 'id', 0) != target_thread:
         return
 
