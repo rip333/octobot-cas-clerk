@@ -73,9 +73,27 @@ jobs:
              ${{ secrets.GCP_CREDENTIALS }}
              EOF
              
+             sudo cat << 'EOF' > /etc/systemd/system/octobot.service
+             [Unit]
+             Description=Octobot Discord Bot
+             After=network.target
+
+             [Service]
+             Type=simple
+             User=$USER
+             WorkingDirectory=/opt/octobot-cas-clerk
+             ExecStart=/opt/octobot-cas-clerk/venv/bin/python3 /opt/octobot-cas-clerk/discord_bot.py
+             Restart=always
+             RestartSec=10
+
+             [Install]
+             WantedBy=multi-user.target
+             EOF
+             
              python3 -m venv venv
              source venv/bin/activate
              pip install -r requirements.txt
              
-             sudo systemctl daemon-reload || true
-             sudo systemctl restart octobot.service || echo "Warning: octobot.service could not be restarted."
+             sudo systemctl daemon-reload
+             sudo systemctl enable octobot.service || true
+             sudo systemctl restart octobot.service
