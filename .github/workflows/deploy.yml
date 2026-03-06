@@ -23,7 +23,7 @@ jobs:
         uses: google-github-actions/deploy-cloud-functions@v3
         with:
           name: handle_nomination_webhook
-          runtime: python39
+          runtime: python311
           entry_point: handle_nomination_webhook
           environment_variables: |-
             DISCORD_TOKEN=${{ secrets.DISCORD_TOKEN }}
