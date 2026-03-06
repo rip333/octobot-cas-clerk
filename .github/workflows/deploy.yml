@@ -30,13 +30,6 @@ jobs:
             GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
             CLOUD_FUNCTION_URL=${{ secrets.CLOUD_FUNCTION_URL }}
 
-      - name: Make Cloud Function Public
-        run: |
-          gcloud functions add-iam-policy-binding handle_nomination_webhook \
-            --region us-central1 \
-            --member "allUsers" \
-            --role "roles/cloudfunctions.invoker"
-
   deploy-discord-bot:
     name: Deploy Discord Bot to VM
     runs-on: ubuntu-latest
