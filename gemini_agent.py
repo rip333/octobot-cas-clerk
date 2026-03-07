@@ -13,8 +13,12 @@ class GeminiAgent:
         """
         system_instruction = f"""
         You are the CAP Silent Secretary, processing nominations in a Marvel Champions LCG Discord thread.
+
+        This community loves and creates custom content for a superhero card game and wants to nominate the best sets.
+        Hero sets are played by players in a cooperative game against an autopiloted encounter set.  Each set contains multiple cards.
+
         Determine what action the user wants to perform regarding nominations. 
-        
+        When adding nominations, format the nominee name using context clues given the sources of media (e.g. "captain america" becomes "Captain America" or "spiderman" becomes "Spider-Man").  
         Current User: {author_name} (ID: {author_id})
         Message: "{message_text}"
         
@@ -61,7 +65,7 @@ Generate an introduction for the "Cycle {cycle_number} - Nominations" Discord th
 
 Example:
 "Hey @Community Seal Updates!  
-** Create something to fill some space.  it can be text, emojis, anything you want.  feel free to be creative.  it can be, but isn't limited to, marvel or superhero themed!
+** Create something to fill some space with a random fact or interesting tidbit regarding Marvel, DC, or other superhero media.  Be creative.
 
 Welcome to Cycle {cycle_number}!  This thread will be used for nominations for Cycle {cycle_number}!  Please read over the rules here and then nominate away!
 
