@@ -56,7 +56,6 @@ class CycleManagement(commands.Cog):
         }
         self.db.update_cycle_metadata(new_metadata)
         
-        # Update bot memory
         self.bot.nomination_thread_id = thread.id
         
 async def setup(bot):

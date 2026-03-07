@@ -25,7 +25,6 @@ async def setup_hook():
         print(f"Loaded target thread ID from DB: {client.nomination_thread_id}")
     except Exception as e:
         print(f"Could not load cycle metadata on boot: {e}")
-        client.nomination_thread_id = int(os.getenv("NOMINATION_THREAD_ID", "0"))
 
 @client.event
 async def on_ready():
@@ -48,8 +47,6 @@ async def on_message(message):
 
     # Thread ID check
     target_thread = getattr(client, 'nomination_thread_id', 0)
-    if not target_thread:
-        target_thread = int(os.getenv("NOMINATION_THREAD_ID", "0"))
 
     if target_thread and getattr(message.channel, 'id', 0) != target_thread:
         return
