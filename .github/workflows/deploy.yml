@@ -73,7 +73,7 @@ jobs:
              ${{ secrets.GCP_CREDENTIALS }}
              EOF
              
-             sudo cat << 'EOF' > /etc/systemd/system/octobot.service
+             sudo tee /etc/systemd/system/octobot.service > /dev/null << EOF
              [Unit]
              Description=Octobot Discord Bot
              After=network.target
