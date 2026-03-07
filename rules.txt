@@ -4,11 +4,13 @@ De-duplication: Before writing, check the nominations table for a nominee_name t
 
 2. Classification & Processing Logic
 
+Set Types: The valid types for sets are exclusively "HERO" or "ENCOUNTER". Encounters are often villains, but not always. You may assume villains are "ENCOUNTER" sets, but check carefully if the user is clear about whether a set is a hero or an encounter.
+
 Ambiguity Resolution: Use internal knowledge of Marvel/DC/Star Wars to classify types.
 
-Rule: If a character exists as both a Hero and a Villain (e.g., Venom), default to the user's phrasing or prompt for clarification.
+Rule: If a character exists as both a Hero and a Encounter (e.g., Venom), default to the user's phrasing or prompt for clarification.
 
-Unclear Type: If the entity cannot be classified with >90% confidence, log ERROR: UNKNOWN_ENTITY_TYPE and do not write to Firestore.
+Unclear Type: If the entity cannot be classified into "HERO" or "ENCOUNTER" with >90% confidence, log ERROR: AMBIGUOUS_TYPE and do not write to Firestore.
 
 Batch Processing: User messages may contain multiple nominations. Process each as an individual transaction. One failure should not block other valid nominations in the same message.
 

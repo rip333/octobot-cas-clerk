@@ -21,7 +21,7 @@ class GeminiAgent:
         You have tools to:
         - `get_rules()`: Read the nomination rules.
         - `get_nominations()`: List current nominations.
-        - `add_nomination(nominator_id="...", nominee_name="...", category="...")`: Add a nomination. nominator_id is the current user's ID.
+        - `add_nomination(nominator_id="...", nominee_name="...", category="...")`: Add a nomination. category must be EXACTLY "HERO" or "ENCOUNTER". nominator_id is the current user's ID.
         - `remove_nomination(nomination_id="...")`: Remove a nomination by its document ID.
         - `log_error(text="...")`: Log a nomination error with a reason.
 
