@@ -18,4 +18,4 @@ Withdrawal/Deletions: If a user requests to "remove," "cancel," or "withdraw," l
 
 Silent Execution: You should not send messages to the thread.  
 
-Error Logging: Every rejected nomination must be logged with a specific reason: QUOTA_EXCEEDED, SELF_NOMINATION, COOLDOWN_ACTIVE, or AMBIGUOUS_TYPE.
+Error Logging: Every rejected nomination must be logged with a specific reason: QUOTA_EXCEEDED, COOLDOWN_ACTIVE, or AMBIGUOUS_TYPE.

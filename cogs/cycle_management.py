@@ -58,5 +58,7 @@ class CycleManagement(commands.Cog):
         
         self.bot.nomination_thread_id = thread.id
         
+        await interaction.delete_original_response()
+        
 async def setup(bot):
     await bot.add_cog(CycleManagement(bot))

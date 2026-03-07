@@ -25,7 +25,7 @@ When modifying this codebase, keep the following architectural constraints in mi
 2. **Intent Extraction over Commands**: The core philosophy is to avoid rigid `!commands`. The user speaks naturally, and `gemini_agent.py` extracts the intent (add, remove, check) and calls the appropriate MCP tool.
 3. **Hard Logic vs. Soft Logic**: 
     - **Soft Logic** (Gemini): Determining if the user means "Venom" (Hero) or "Venom" (Villain).
-    - **Hard Logic** (Firestore Tools): Deduplicating entries natively before writing, logging specific structured errors (`QUOTA_EXCEEDED`, `SELF_NOMINATION`, `AMBIGUOUS_TYPE`).
+    - **Hard Logic** (Firestore Tools): Deduplicating entries natively before writing, logging specific structured errors (`QUOTA_EXCEEDED`, `AMBIGUOUS_TYPE`).
 4. **Asynchronous Non-Blocking Execution**: Calls to the Gemini API are synchronous in the SDK, so `discord_bot.py` uses `loop.run_in_executor()` to avoid blocking the Discord bot's async event loop. Keep this pattern intact.
 
 ## Key Environment Variables

@@ -53,14 +53,17 @@ class GeminiAgent:
 
     def generate_cycle_intro(self, cycle_number: int) -> str:
         """
-        Use Gemini Flash to generate a new thread introduction for the current cycle.
+        Use Gemini Flash to generate a new thread introduction for the current cycle.  **Be creative in this section!**
         """
 
         prompt = f"""
 Generate an introduction for the "Cycle {cycle_number} - Nominations" Discord thread. 
 
 Example:
-"Hey @Community Seal Updates!  Welcome to Cycle {cycle_number}!  This thread will be used for nominations for Cycle {cycle_number}!  Please read over the rules here and then nominate away!
+"Hey @Community Seal Updates!  
+** Create something to fill some space.  it can be text, emojis, anything you want.  feel free to be creative.  it can be, but isn't limited to, marvel or superhero themed!
+
+Welcome to Cycle {cycle_number}!  This thread will be used for nominations for Cycle {cycle_number}!  Please read over the rules here and then nominate away!
 
 Rules
 • You may nominate 2 Hero sets and 1 Encounter set"
@@ -72,7 +75,7 @@ Output *only* the generated introduction text. Do not wrap it in markdown code b
             model='gemini-flash-latest',
             contents=prompt,
             config=types.GenerateContentConfig(
-                temperature=1.2
+                temperature=1.4
             )
         )
         return response.text.strip()
