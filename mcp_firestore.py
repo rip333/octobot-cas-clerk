@@ -46,9 +46,9 @@ class MCPFirestore:
 
     def log_error(self, text: str) -> str:
         """
-        Log an error to the nomination_errors collection.
+        Log an error to the errors collection.
         """
-        doc_ref = self.db.collection('nomination_errors').document()
+        doc_ref = self.db.collection('errors').document()
         doc_ref.set({
             'text': text,
             'timestamp': firestore.SERVER_TIMESTAMP

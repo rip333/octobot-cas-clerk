@@ -10,6 +10,31 @@ intents = discord.Intents.default()
 intents.message_content = True
 client = commands.Bot(command_prefix="!", intents=intents)
 
+import traceback
+
+@client.tree.error
+async def on_app_command_error(interaction: discord.Interaction, error: discord.app_commands.AppCommandError):
+    from mcp_firestore import MCPFirestore
+    
+    db = MCPFirestore()
+    
+    # Format the traceback
+    error_traceback = "".join(traceback.format_exception(type(error), error, error.__traceback__)) if hasattr(error, '__traceback__') else "".join(traceback.format_exception(error))
+    print(f"Command Error: {error_traceback}")
+    
+    # Log to Firestore
+    try:
+        db.log_error(f"Command '{interaction.command.name if interaction.command else 'Unknown'}' failed by user {interaction.user.name}:\n{error_traceback}")
+    except Exception as e:
+        print(f"Failed to log error to Firestore: {e}")
+        
+    # Respond to user
+    error_msg = "An error occurred while executing the command. The admin has been logged the details."
+    if interaction.response.is_done():
+        await interaction.followup.send(error_msg, ephemeral=True)
+    else:
+        await interaction.response.send_message(error_msg, ephemeral=True)
+
 @client.event
 async def setup_hook():
     await client.load_extension("cogs.nomination_report")

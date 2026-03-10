@@ -110,9 +110,37 @@ class Voting(commands.Cog):
         deleted_count = self.db.clear_votes()
         print(f"Deleted {deleted_count} votes from table.")
         
+        # Build embed from current nominations
+        results = self.db.get_nominations()
+        
+        heroes = set()
+        encounters = set()
+        
+        for data in results:
+            category = data.get('category', '').lower()
+            nominee = data.get('nomineeName', 'Unknown')
+            
+            if category == 'hero':
+                heroes.add(nominee)
+            elif category == 'encounter':
+                encounters.add(nominee)
+
+        # Sort alphabetically
+        heroes = sorted(list(heroes))
+        encounters = sorted(list(encounters))
+
+        embed = discord.Embed(title="Final Nominations", color=discord.Color.blue())
+        
+        hero_text = "\n".join(f"- {name}" for name in heroes) if heroes else "No hero nominations."
+        embed.add_field(name="Heroes", value=hero_text, inline=False)
+        
+        encounter_text = "\n".join(f"- {name}" for name in encounters) if encounters else "No encounter nominations."
+        embed.add_field(name="Encounters", value=encounter_text, inline=False)
+        
         await interaction.followup.send(
             "**📢 Nominations are closed! Voting is now open!**\n\n"
-            "Use the `/vote` command to cast your ballot. You may vote for up to 10 Heroes and 2 Encounters."
+            "Here are the final candidates for this cycle. Use the `/vote` command to cast your ballot. You may vote for up to 10 Heroes and 2 Encounters.",
+            embed=embed
         )
 
     @app_commands.command(name="vote", description="Summon your personal ballot to vote on the current nominations.")
