@@ -25,7 +25,7 @@ class GeminiAgent:
         You have tools to:
         - `get_rules()`: Read the nomination rules.
         - `get_nominations()`: List current nominations.
-        - `add_nomination(nominator_id="...", nominee_name="...", category="...")`: Add a nomination. category must be EXACTLY "HERO" or "ENCOUNTER". nominator_id is the current user's ID.
+        - `add_nomination(nominator_id="...", nominator_name="...", nominee_name="...", category="...")`: Add a nomination. category must be EXACTLY "HERO" or "ENCOUNTER". nominator_id is the current user's ID and nominator_name is the current user's name.
         - `remove_nomination(nomination_id="...")`: Remove a nomination by its document ID.
         - `log_error(text="...")`: Log a nomination error with a reason.
 
@@ -65,14 +65,14 @@ Generate an introduction for the "Cycle {cycle_number} - Nominations" Discord th
 
 Example:
 "Hey @Community Seal Updates!  
-** Create something to fill some space with a random fact or interesting tidbit regarding Marvel, DC, or other superhero media.  Be creative.
+*Create something to fill some space with a random fact or interesting tidbit regarding Marvel, DC, or other superhero media.  Be creative.  Format it in italics.*
 
-Welcome to Cycle {cycle_number}!  This thread will be used for nominations for Cycle {cycle_number}!  Please read over the rules here and then nominate away!
+Welcome to Cycle {cycle_number}! This thread will be used for nominations for Cycle {cycle_number}! Please read over the rules here and then nominate away!
 
 Rules
-• You may nominate 2 Hero sets and 1 Encounter set"
+• You may nominate 2 Hero sets and 1 Encounter set. Please say "hero" or "encounter" to specify which type of set you are nominating.
 
-Output *only* the generated introduction text. Do not wrap it in markdown code blocks unless necessary.
+Output *only* the generated introduction text.
 """
         from google.genai import types
         response = self.client.models.generate_content(

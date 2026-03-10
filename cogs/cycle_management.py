@@ -52,11 +52,13 @@ class CycleManagement(commands.Cog):
         new_metadata = {
             "number": current_cycle_number,
             "active": True,
-            "nomination_thread_id": thread.id
+            "nomination_thread_id": thread.id,
+            "state": "nominations"
         }
         self.db.update_cycle_metadata(new_metadata)
         
         self.bot.nomination_thread_id = thread.id
+        self.bot.nomination_state = "nominations"
         
         await interaction.delete_original_response()
         

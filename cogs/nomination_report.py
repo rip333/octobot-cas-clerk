@@ -8,9 +8,9 @@ class CapReport(commands.Cog):
         self.bot = bot
         self.db = firestore.Client(database="octobot-cas-db")
 
-    @app_commands.command(name="cap-report", description="Generate a CAP Nomination Report")
+    @app_commands.command(name="nomination-report", description="Generate a Nomination Report")
     @app_commands.default_permissions(manage_messages=True)
-    async def cap_report(self, interaction: discord.Interaction):
+    async def nomination_report(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         
         query = self.db.collection('nominations').order_by('timestamp', direction=firestore.Query.DESCENDING)
@@ -29,7 +29,7 @@ class CapReport(commands.Cog):
             elif category == 'encounter':
                 encounters.append(nominee)
         
-        embed = discord.Embed(title="CAP Nomination Report", color=discord.Color.blue())
+        embed = discord.Embed(title="Nomination Report", color=discord.Color.blue())
         
         hero_text = "\n".join(f"- {name}" for name in heroes) if heroes else "No hero nominations."
         embed.add_field(name="Heroes", value=hero_text, inline=False)

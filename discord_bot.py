@@ -12,8 +12,9 @@ client = commands.Bot(command_prefix="!", intents=intents)
 
 @client.event
 async def setup_hook():
-    await client.load_extension("cogs.cap_report")
+    await client.load_extension("cogs.nomination_report")
     await client.load_extension("cogs.cycle_management")
+    await client.load_extension("cogs.voting")
     await client.tree.sync()
     
     from mcp_firestore import MCPFirestore
@@ -22,7 +23,8 @@ async def setup_hook():
         metadata = db.get_cycle_metadata()
         target_thread = metadata.get("nomination_thread_id", 0)
         client.nomination_thread_id = int(target_thread) if target_thread else 0
-        print(f"Loaded target thread ID from DB: {client.nomination_thread_id}")
+        client.nomination_state = metadata.get("state", "off")
+        print(f"Loaded target thread ID from DB: {client.nomination_thread_id}, State: {client.nomination_state}")
     except Exception as e:
         print(f"Could not load cycle metadata on boot: {e}")
 
@@ -49,6 +51,11 @@ async def on_message(message):
     target_thread = getattr(client, 'nomination_thread_id', 0)
 
     if target_thread and getattr(message.channel, 'id', 0) != target_thread:
+        return
+
+    # Phase State Check
+    target_state = getattr(client, 'nomination_state', 'off')
+    if target_state != "nominations":
         return
 
     # 2s Rate Limit

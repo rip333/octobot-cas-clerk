@@ -20,13 +20,14 @@ class MCPFirestore:
             nominations.append(data)
         return nominations
 
-    def add_nomination(self, nominator_id: str, nominee_name: str, category: str) -> str:
+    def add_nomination(self, nominator_id: str, nominator_name: str, nominee_name: str, category: str) -> str:
         """
         Add a new nomination to the nominations collection.
         """
         doc_ref = self.db.collection('nominations').document()
         doc_ref.set({
-            'nominatorId': nominator_id,
+            'nominatorId': str(nominator_id),
+            'nominatorName': str(nominator_name),
             'nomineeName': nominee_name,
             'category': category,
             'timestamp': firestore.SERVER_TIMESTAMP
@@ -75,7 +76,8 @@ class MCPFirestore:
             default_data = {
                 "number": 11,
                 "active": True,
-                "nomination_thread_id": 0
+                "nomination_thread_id": 0,
+                "state": "off"
             }
             doc_ref.set(default_data)
             return default_data
@@ -103,3 +105,47 @@ class MCPFirestore:
             
         return deleted_count
 
+    def record_user_vote(self, user_id: str, user_name: str, heroes: list, encounters: list) -> bool:
+        """
+        Record a user's vote in the votes collection.
+        Uses their user_id as the document ID so they can only vote once (overwrites previous).
+        """
+        doc_ref = self.db.collection('votes').document(str(user_id))
+        doc_ref.set({
+            'userId': str(user_id),
+            'userName': str(user_name),
+            'heroes': heroes,
+            'encounters': encounters,
+            'timestamp': firestore.SERVER_TIMESTAMP
+        })
+        return True
+
+    def get_all_votes(self) -> list:
+        """
+        Retrieve all votes from the votes collection.
+        """
+        query = self.db.collection('votes').order_by('timestamp', direction=firestore.Query.DESCENDING)
+        results = query.stream()
+        votes = []
+        for doc in results:
+            data = doc.to_dict()
+            data['id'] = doc.id
+            if 'timestamp' in data and data['timestamp']:
+                data['timestamp'] = str(data['timestamp'])
+            votes.append(data)
+        return votes
+
+    def clear_votes(self) -> int:
+        """
+        Delete all documents in the votes collection.
+        Returns the number of documents deleted.
+        """
+        votes_ref = self.db.collection('votes')
+        docs = votes_ref.stream()
+        
+        deleted_count = 0
+        for doc in docs:
+            doc.reference.delete()
+            deleted_count += 1
+            
+        return deleted_count
