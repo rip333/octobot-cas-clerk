@@ -3,31 +3,6 @@
 **Marvel Champions Homebrew Community Approval System Clerk**
 
 Octobot CAS Clerk is the second arm of the bot - to help the homebrew community manage the voting and sealing of custom content. 
-## Features
-
-- **Discord Listener & Command Setup**  
-  Listens to a specific nomination thread, employing an efficient executor to offload asynchronous AI processing without blocking the main Discord event loop. Includes slash commands such as `/cap-report` to generate a dynamic summary and `/start-nominations` to initialize new cycles.
-- **Natural Language Intent Extraction (Gemini AI)**  
-  Instead of requiring rigid `/commands` for every action, the bot reads standard messages, understands context, resolves ambiguity (e.g., parsing whether "Venom" means the hero or the villain), and processes batch inputs in a single message.
-- **Model Context Protocol (MCP) Backend**  
-  The agent seamlessly executes intent by using a suite of custom Python tools (`get_rules`, `add_nomination`, `remove_nomination`, `get_nominations`, `log_error`) mapped via prompt to Gemini, allowing dynamic execution against the Firestore `octobot-cas-db`.
-- **Advanced Rules & Verification Engine**  
-  Implements hard-logic systems (deduplication of nominees) and specific behavioral directives (Silent Execution, comprehensive Error Logging for failures like `QUOTA_EXCEEDED` or `AMBIGUOUS_TYPE`).
-- **Dynamic Cycle Management**  
-  Tracks the current cycle dynamically via Firestore (`cycle_metadata`), allowing the bot to automatically generate opening introductions for new threads via Gemini and maintain the `nomination_thread_id` dynamically.
-- **Google Cloud Functions Support**  
-  Exposes an HTTP Cloud Function (`main.py`) that can receive webhook payloads from alternative platforms and funnel them directly into the Gemini extraction layer.
-
-## Architecture
-
-The system is decoupled into several main components:
-- **`discord_bot.py`**: The main async Discord bot script utilizing `discord.py` to listen for messages, handle rate-limiting, and trigger the agent.
-- **`main.py`**: The Google Cloud Functions entry point for webhook-driven events via `functions-framework`.
-- **`gemini_agent.py`**: Configured to orchestrate the `google-genai` client, construct the prompt definitions, inject Firebase MCP toolsets, and generate automated responses for new threads.
-- **`mcp_firestore.py`**: The toolkit containing mutation and query functions connecting to Google Cloud Firestore, handling documents like nominations and cycle metadata.
-- **`cogs/cap_report.py`**: Discord Cog containing the interactive `/cap-report` UI component.
-- **`cogs/cycle_management.py`**: Discord Cog enabling cycle administration (`/start-nominations`), which uses the AI to dynamically generate thread intros and manage cycle resets.
-- **`rules.txt`**: Plaintext definitions given directly to the AI as part of its system prompt to restrict edge-cases and validate behavior.
 
 ## Prerequisites
 
