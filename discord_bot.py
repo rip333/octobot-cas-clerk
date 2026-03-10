@@ -40,6 +40,7 @@ async def setup_hook():
     await client.load_extension("cogs.nomination_report")
     await client.load_extension("cogs.cycle_management")
     await client.load_extension("cogs.voting")
+    await client.load_extension("cogs.spotlight_assignment")
     await client.tree.sync()
     
     from mcp_firestore import MCPFirestore

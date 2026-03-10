@@ -151,3 +151,20 @@ class MCPFirestore:
             deleted_count += 1
             
         return deleted_count
+
+    def save_spotlight_roster(self, cycle_number: int, roster: list) -> bool:
+        """
+        Record the finalized spotlight roster for a specific cycle.
+        """
+        batch = self.db.batch()
+        for hero in roster:
+            doc_ref = self.db.collection('spotlight_roster').document()
+            batch.set(doc_ref, {
+                'cycle': int(cycle_number),
+                'nominee': str(hero['name']),
+                'category': str(hero['category']),
+                'timestamp': firestore.SERVER_TIMESTAMP
+            })
+        batch.commit()
+        return True
+
