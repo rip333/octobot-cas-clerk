@@ -46,7 +46,7 @@ jobs:
       - name: SSH into VM and Update
         uses: google-github-actions/ssh-compute@v1
         with:
-          instance_name: octobot-1
+          instance_name: small-20260310-162654
           zone: us-central1-a
           ssh_private_key: ${{ secrets.VM_SSH_KEY }}
           command: |
