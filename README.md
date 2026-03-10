@@ -2,8 +2,7 @@
 
 **Marvel Champions Homebrew Community Approval System Clerk**
 
-Octobot CAS Clerk is a sophisticated, AI-driven Discord bot and webhook listener designed to serve as a "Silent Secretary" for managing homebrew content nominations within a Marvel Champions LCG Discord server. By leveraging Google's Gemini Flash AI and Model Context Protocol (MCP) tool integration, the bot can intelligently understand natural language messages from Discord users, determine their intent (such as adding, withdrawing, or querying nominations), and execute the required actions directly into a Google Cloud Firestore backend.
-
+Octobot CAS Clerk is the second arm of the bot - to help the homebrew community manage the voting and sealing of custom content. 
 ## Features
 
 - **Discord Listener & Command Setup**  
