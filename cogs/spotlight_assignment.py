@@ -4,7 +4,7 @@ from discord import app_commands
 from mcp_firestore import MCPFirestore
 
 class SpotlightAssignmentView(discord.ui.View):
-    def __init__(self, db, sorted_heroes, cycle_number, interaction: discord.Interaction):
+    def __init__(self, db, sorted_heroes, cycle_number, interaction: discord.Interaction, top_encounters=None, nom_map=None):
         super().__init__(timeout=None)
         self.db = db
         self.sorted_heroes = sorted_heroes
@@ -12,6 +12,8 @@ class SpotlightAssignmentView(discord.ui.View):
         self.original_interaction = interaction
         self.current_index = 0
         self.roster = []
+        self.top_encounters = top_encounters or []
+        self.nom_map = nom_map or {}
         
         # Quotas
         self.quotas = {
@@ -63,10 +65,17 @@ class SpotlightAssignmentView(discord.ui.View):
             await interaction.response.send_message(f"No slots remaining for {category} or Wildcards!", ephemeral=True)
             return
 
-        self.roster.append({
+        hero_data = {
             "name": hero_name,
             "category": assigned_category
-        })
+        }
+        nom = self.nom_map.get(hero_name, {})
+        if nom.get('creatorName'):
+            hero_data['creatorName'] = nom['creatorName']
+        if nom.get('creatorDiscordId'):
+            hero_data['creatorDiscordId'] = nom['creatorDiscordId']
+
+        self.roster.append(hero_data)
         self.current_index += 1
         await self.update_message(interaction)
 
@@ -94,6 +103,19 @@ class SpotlightAssignmentView(discord.ui.View):
         await interaction.response.edit_message(content="Spotlight assignment cancelled.", embed=None, view=self)
 
     async def finish_assignment(self, interaction: discord.Interaction):
+        # Auto-add the Top 2 encounters to the roster if they exist
+        for enc_name, _ in self.top_encounters:
+            enc_data = {
+                "name": enc_name,
+                "category": "Encounter"
+            }
+            nom = self.nom_map.get(enc_name, {})
+            if nom.get('creatorName'):
+                enc_data['creatorName'] = nom['creatorName']
+            if nom.get('creatorDiscordId'):
+                enc_data['creatorDiscordId'] = nom['creatorDiscordId']
+            self.roster.append(enc_data)
+
         # Save to DB
         self.db.save_spotlight_roster(self.cycle_number, self.roster)
         
@@ -106,13 +128,15 @@ class SpotlightAssignmentView(discord.ui.View):
         dc_heroes = [h['name'] for h in self.roster if h['category'] == 'DC']
         other_heroes = [h['name'] for h in self.roster if h['category'] == 'Other']
         wildcard_heroes = [h['name'] for h in self.roster if h['category'] == 'Wildcard']
+        encounters = [h['name'] for h in self.roster if h['category'] == 'Encounter']
         
         embed.add_field(name="Marvel", value="\n".join(f"- {h}" for h in marvel_heroes) if marvel_heroes else "None", inline=False)
         embed.add_field(name="DC", value="\n".join(f"- {h}" for h in dc_heroes) if dc_heroes else "None", inline=False)
         embed.add_field(name="Other", value="\n".join(f"- {h}" for h in other_heroes) if other_heroes else "None", inline=False)
         embed.add_field(name="Wildcards", value="\n".join(f"- {h}" for h in wildcard_heroes) if wildcard_heroes else "None", inline=False)
+        embed.add_field(name="Encounters", value="\n".join(f"- {h}" for h in encounters) if encounters else "None", inline=False)
         
-        await interaction.response.edit_message(content="**Assignment Complete!** The roster has been saved.", embed=embed, view=self)
+        await interaction.response.edit_message(content="**Spotlight Sets saved to table**", embed=embed, view=self)
 
 
 class SpotlightAssignment(commands.Cog):
@@ -123,28 +147,24 @@ class SpotlightAssignment(commands.Cog):
     @app_commands.command(name="assign-spotlight", description="Admin: Interactively assign top-voted heroes to the Spotlight roster.")
     @app_commands.default_permissions(manage_messages=True)
     async def assign_spotlight(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=False)
+        await interaction.response.defer(ephemeral=True)
         
         # Get cycle number
         metadata = self.db.get_cycle_metadata()
         cycle_number = metadata.get("number", 0)
         
-        # Tally Votes
-        results = self.db.get_all_votes()
+        from cogs.voting import get_filtered_results
+        filtered = get_filtered_results(self.db)
         
-        hero_counts = {}
-        for data in results:
-            for hero in data.get('heroes', []):
-                hero_counts[hero] = hero_counts.get(hero, 0) + 1
-                
-        if not hero_counts:
+        sorted_heroes = filtered['heroes']
+        top_encounters = filtered['encounters'][:2]
+        nom_map = filtered['nom_map']
+        
+        if not sorted_heroes:
             await interaction.followup.send("No votes found to assign.", ephemeral=True)
             return
             
-        # Sort desc by votes, asc by name
-        sorted_heroes = sorted(hero_counts.items(), key=lambda x: (-x[1], x[0]))
-        
-        view = SpotlightAssignmentView(self.db, sorted_heroes, cycle_number, interaction)
+        view = SpotlightAssignmentView(self.db, sorted_heroes, cycle_number, interaction, top_encounters, nom_map)
         
         hero_name, vote_count = sorted_heroes[0]
         
@@ -164,7 +184,7 @@ class SpotlightAssignment(commands.Cog):
         embed.add_field(name="Remaining Quotas", value=quota_text, inline=False)
         embed.add_field(name="Current Roster", value="None yet.", inline=False)
         
-        await interaction.followup.send(embed=embed, view=view)
+        await interaction.followup.send(embed=embed, view=view, ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(SpotlightAssignment(bot))

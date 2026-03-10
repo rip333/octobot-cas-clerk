@@ -22,18 +22,23 @@ class MCPFirestore:
             nominations.append(data)
         return nominations
 
-    def add_nomination(self, nominator_id: str, nominator_name: str, nominee_name: str, category: str) -> str:
+    def add_nomination(self, nominator_id: str, nominator_name: str, nominee_name: str, category: str, creator_name: str = "", creator_discord_id: str = "") -> str:
         """
         Add a new nomination to the nominations collection.
         """
         doc_ref = self.db.collection('nominations').document()
-        doc_ref.set({
+        data = {
             'nominatorId': str(nominator_id),
             'nominatorName': str(nominator_name),
             'nomineeName': nominee_name,
             'category': category,
             'timestamp': firestore.SERVER_TIMESTAMP
-        })
+        }
+        if creator_name:
+            data['creatorName'] = creator_name
+        if creator_discord_id:
+            data['creatorDiscordId'] = creator_discord_id
+        doc_ref.set(data)
         return doc_ref.id
 
     def remove_nomination(self, nomination_id: str) -> bool:
@@ -159,12 +164,17 @@ class MCPFirestore:
         batch = self.db.batch()
         for hero in roster:
             doc_ref = self.db.collection('spotlight_roster').document()
-            batch.set(doc_ref, {
+            data = {
                 'cycle': int(cycle_number),
                 'nominee': str(hero['name']),
                 'category': str(hero['category']),
                 'timestamp': firestore.SERVER_TIMESTAMP
-            })
+            }
+            if 'creatorName' in hero:
+                data['creatorName'] = str(hero['creatorName'])
+            if 'creatorDiscordId' in hero:
+                data['creatorDiscordId'] = str(hero['creatorDiscordId'])
+            batch.set(doc_ref, data)
         batch.commit()
         return True
 

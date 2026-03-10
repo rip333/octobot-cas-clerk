@@ -7,6 +7,58 @@ from discord.ext import commands
 from discord import app_commands
 from mcp_firestore import MCPFirestore
 
+def get_filtered_results(db):
+    votes = db.get_all_votes()
+    noms = db.get_nominations()
+    
+    nom_map = {}
+    for data in noms:
+        nominee = data.get('nomineeName', 'Unknown')
+        creator_name = data.get('creatorName', '')
+        display_name = f"{nominee} — {creator_name}" if creator_name else nominee
+        nom_map[display_name] = data
+
+    hero_counts = {}
+    encounter_counts = {}
+    total_voters = 0
+    
+    for data in votes:
+        total_voters += 1
+        for hero in data.get('heroes', []):
+            hero_counts[hero] = hero_counts.get(hero, 0) + 1
+        for encounter in data.get('encounters', []):
+            encounter_counts[encounter] = encounter_counts.get(encounter, 0) + 1
+            
+    sorted_heroes = sorted(hero_counts.items(), key=lambda x: (-x[1], x[0]))
+    sorted_encounters = sorted(encounter_counts.items(), key=lambda x: (-x[1], x[0]))
+    
+    def filter_by_creator(sorted_items):
+        filtered = []
+        ignored = []
+        seen_creators = set()
+        for item_name, count in sorted_items:
+            nom_data = nom_map.get(item_name)
+            creator = nom_data.get('creatorName', '') if nom_data else ''
+            if creator:
+                if creator in seen_creators:
+                    ignored.append((item_name, count))
+                    continue
+                seen_creators.add(creator)
+            filtered.append((item_name, count))
+        return filtered, ignored
+
+    filtered_heroes, ignored_heroes = filter_by_creator(sorted_heroes)
+    filtered_encounters, ignored_encounters = filter_by_creator(sorted_encounters)
+
+    return {
+        'total_voters': total_voters,
+        'heroes': filtered_heroes,
+        'ignored_heroes': ignored_heroes,
+        'encounters': filtered_encounters,
+        'ignored_encounters': ignored_encounters,
+        'nom_map': nom_map
+    }
+
 class VotingView(discord.ui.View):
     def __init__(self, db, hero_options, encounter_options):
         super().__init__(timeout=None)
@@ -119,11 +171,14 @@ class Voting(commands.Cog):
         for data in results:
             category = data.get('category', '').lower()
             nominee = data.get('nomineeName', 'Unknown')
+            creator_name = data.get('creatorName', '')
+            
+            display_name = f"{nominee} — {creator_name}" if creator_name else nominee
             
             if category == 'hero':
-                heroes.add(nominee)
+                heroes.add(display_name)
             elif category == 'encounter':
-                encounters.add(nominee)
+                encounters.add(display_name)
 
         # Sort alphabetically
         heroes = sorted(list(heroes))
@@ -161,11 +216,14 @@ class Voting(commands.Cog):
         for data in results:
             category = data.get('category', '').lower()
             nominee = data.get('nomineeName', 'Unknown')
+            creator_name = data.get('creatorName', '')
+            
+            display_name = f"{nominee} — {creator_name}" if creator_name else nominee
             
             if category == 'hero':
-                heroes.add(nominee)
+                heroes.add(display_name)
             elif category == 'encounter':
-                encounters.add(nominee)
+                encounters.add(display_name)
                 
         if not heroes and not encounters:
             await interaction.followup.send("There are no active nominations to vote on.", ephemeral=True)
@@ -193,40 +251,25 @@ class Voting(commands.Cog):
     async def tally_votes(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=False)
         
-        results = self.db.get_all_votes()
+        filtered = get_filtered_results(self.db)
+        total_voters = filtered['total_voters']
         
-        hero_counts = {}
-        encounter_counts = {}
-        total_voters = 0
-        
-        for data in results:
-            total_voters += 1
-            for hero in data.get('heroes', []):
-                hero_counts[hero] = hero_counts.get(hero, 0) + 1
-            for encounter in data.get('encounters', []):
-                encounter_counts[encounter] = encounter_counts.get(encounter, 0) + 1
-                
         if total_voters == 0:
             await interaction.followup.send("No votes have been cast yet.")
             return
             
-        # Sort by vote count descending, then alphabetically for ties
-        sorted_heroes = sorted(hero_counts.items(), key=lambda x: (-x[1], x[0]))
-        sorted_encounters = sorted(encounter_counts.items(), key=lambda x: (-x[1], x[0]))
-        
         embed = discord.Embed(title="Voting Results", color=discord.Color.gold(), description=f"Total Voters: **{total_voters}**")
         
-        hero_text = ""
-        for name, count in sorted_heroes:
-            hero_text += f"**{count}** - {name}\n"
-        if not hero_text:
-            hero_text = "No hero votes."
+        def format_results(items):
+            return "\n".join(f"**{count}** - {name}" for name, count in items)
             
-        encounter_text = ""
-        for name, count in sorted_encounters:
-            encounter_text += f"**{count}** - {name}\n"
-        if not encounter_text:
-            encounter_text = "No encounter votes."
+        hero_text = format_results(filtered['heroes']) if filtered['heroes'] else "No hero votes."
+        if filtered['ignored_heroes']:
+            hero_text += f"\n\n*Ignored (Limit 1 per Creator):*\n{format_results(filtered['ignored_heroes'])}"
+            
+        encounter_text = format_results(filtered['encounters']) if filtered['encounters'] else "No encounter votes."
+        if filtered['ignored_encounters']:
+            encounter_text += f"\n\n*Ignored (Limit 1 per Creator):*\n{format_results(filtered['ignored_encounters'])}"
             
         def split_text(text):
             return [text[i:i+1024] for i in range(0, len(text), 1024)]
