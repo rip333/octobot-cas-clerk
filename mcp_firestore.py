@@ -178,3 +178,29 @@ class MCPFirestore:
         batch.commit()
         return True
 
+    def save_ip_assignment(self, cycle_number: int, nominee: str, ip_category: str) -> bool:
+        """
+        Record the IP assignment for a specific nominee in a cycle.
+        """
+        doc_id = f"{cycle_number}_{nominee}".replace('/', '_')
+        doc_ref = self.db.collection('ip_assignments').document(doc_id)
+        doc_ref.set({
+            'cycle': int(cycle_number),
+            'nominee': str(nominee),
+            'ip_category': str(ip_category),
+            'timestamp': firestore.SERVER_TIMESTAMP
+        }, merge=True)
+        return True
+
+    def get_ip_assignments(self, cycle_number: int) -> dict:
+        """
+        Get all IP assignments for a specific cycle. Returns a dict mapping nominee to ip_category.
+        """
+        query = self.db.collection('ip_assignments').where('cycle', '==', int(cycle_number))
+        results = query.stream()
+        assignments = {}
+        for doc in results:
+            data = doc.to_dict()
+            assignments[data['nominee']] = data['ip_category']
+        return assignments
+

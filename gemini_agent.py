@@ -100,7 +100,6 @@ Welcome to Cycle {cycle_number}! This thread will be used for nominations for Cy
 
 Rules
 • You may nominate 2 Hero sets and 1 Encounter set. Please include "hero" or "encounter" in your nomination to specify which type of set you are nominating.
-• Feel free to write your nominations using natural language. The bot will understand conversational text!
 
 Output *only* the generated introduction text.
 """

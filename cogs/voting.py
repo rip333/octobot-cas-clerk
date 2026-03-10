@@ -127,13 +127,13 @@ class VotingView(discord.ui.View):
             
         # Validate totals
         if len(selected_heroes) > 10:
-            await interaction.response.send_message(f"You selected {len(selected_heroes)} heroes, but the maximum is 10. Please adjust your selections.", ephemeral=True)
+            await interaction.response.send_message(f"Hero maximum is 10.", ephemeral=True)
             return
         if len(selected_encounters) > 2:
-             await interaction.response.send_message(f"You selected {len(selected_encounters)} encounters, but the maximum is 2. Please adjust your selections.", ephemeral=True)
+             await interaction.response.send_message(f"Encounter maximum is 2.", ephemeral=True)
              return
         if len(selected_heroes) == 0 and len(selected_encounters) == 0:
-             await interaction.response.send_message("You didn't select anything to vote for! Please make a selection.", ephemeral=True)
+             await interaction.response.send_message("Please make a selection.", ephemeral=True)
              return
 
         # Record to Firestore
@@ -141,7 +141,8 @@ class VotingView(discord.ui.View):
         user_name = interaction.user.display_name
         self.db.record_user_vote(user_id, user_name, selected_heroes, selected_encounters)
         
-        await interaction.response.send_message(f"Thanks! Your votes have been recorded. You selected **{len(selected_heroes)}** Heroes and **{len(selected_encounters)}** Encounters.\n*(You can change your votes by submitting again)*", ephemeral=True)
+        content = f"**✅ votes_submitted**"
+        await interaction.response.edit_message(content=content, view=self)
 
 class Voting(commands.Cog):
     def __init__(self, bot):
@@ -194,7 +195,7 @@ class Voting(commands.Cog):
         
         await interaction.followup.send(
             "**📢 Nominations are closed! Voting is now open!**\n\n"
-            "Here are the final candidates for this cycle. Use the `/vote` command to cast your ballot. You may vote for up to 10 Heroes and 2 Encounters.",
+            "Use the `/vote` command to cast your ballot. You may vote for up to 10 Heroes and 2 Encounters.",
             embed=embed
         )
 
@@ -240,8 +241,7 @@ class Voting(commands.Cog):
         
         await interaction.followup.send(
             "**🗳️ Cast Your Votes!**\n"
-            "Select up to **10 Heroes** and **2 Encounters** from the dropdowns below.\n"
-            "When you are finished making your selections, click **Submit Votes**.",
+            "Select up to **10 Heroes** and **2 Encounters**",
             view=view,
             ephemeral=True
         )
@@ -251,25 +251,44 @@ class Voting(commands.Cog):
     async def tally_votes(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=False)
         
-        filtered = get_filtered_results(self.db)
-        total_voters = filtered['total_voters']
+        results = self.db.get_all_votes()
+        noms = self.db.get_nominations()
         
+        nom_map = {}
+        for data in noms:
+            nominee = data.get('nomineeName', 'Unknown')
+            creator_name = data.get('creatorName', '')
+            display_name = f"{nominee} — {creator_name}" if creator_name else nominee
+            nom_map[nominee] = display_name
+            
+        hero_counts = {}
+        encounter_counts = {}
+        total_voters = 0
+        
+        for data in results:
+            total_voters += 1
+            for hero in data.get('heroes', []):
+                # get back the display name if possible
+                disp = nom_map.get(hero.split(" — ")[0], hero)
+                hero_counts[disp] = hero_counts.get(disp, 0) + 1
+            for encounter in data.get('encounters', []):
+                disp = nom_map.get(encounter.split(" — ")[0], encounter)
+                encounter_counts[disp] = encounter_counts.get(disp, 0) + 1
+                
         if total_voters == 0:
-            await interaction.followup.send("No votes have been cast yet.")
+            await interaction.followup.send("No votes have been cast")
             return
+            
+        sorted_heroes = sorted(hero_counts.items(), key=lambda x: (-x[1], x[0]))
+        sorted_encounters = sorted(encounter_counts.items(), key=lambda x: (-x[1], x[0]))
             
         embed = discord.Embed(title="Voting Results", color=discord.Color.gold(), description=f"Total Voters: **{total_voters}**")
         
         def format_results(items):
             return "\n".join(f"**{count}** - {name}" for name, count in items)
             
-        hero_text = format_results(filtered['heroes']) if filtered['heroes'] else "No hero votes."
-        if filtered['ignored_heroes']:
-            hero_text += f"\n\n*Ignored (Limit 1 per Creator):*\n{format_results(filtered['ignored_heroes'])}"
-            
-        encounter_text = format_results(filtered['encounters']) if filtered['encounters'] else "No encounter votes."
-        if filtered['ignored_encounters']:
-            encounter_text += f"\n\n*Ignored (Limit 1 per Creator):*\n{format_results(filtered['ignored_encounters'])}"
+        hero_text = format_results(sorted_heroes) if sorted_heroes else "No hero votes."
+        encounter_text = format_results(sorted_encounters) if sorted_encounters else "No encounter votes."
             
         def split_text(text):
             return [text[i:i+1024] for i in range(0, len(text), 1024)]

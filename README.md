@@ -10,6 +10,15 @@ Octobot CAS Clerk is the second arm of the bot - to help the homebrew community 
 - **Google Cloud Platform Account**: Need to have Cloud Firestore and Gen AI enabled.
 - **Discord Developer Application**: A bot token with Message Content Intents enabled.
 
+## Bot Commands & Workflow
+
+The Octobot manages the homebrew lifecycle through distinct phases:
+1. **Nominations Phase**: Users nominate Heroes and Encounters (monitored and parsed by a Gemini natural language agent).
+2. **Voting Phase**: Admins use `/start-voting` to lock nominations. Users cast their ballots using `/vote` (selecting up to 10 Heroes and 2 Encounters). Admins can view raw vote numbers anytime with `/tally-votes`.
+3. **Spotlight Assignment Phase**: 
+   - After voting, admins use `/assign-ip` to interactively tag the IP (Marvel, DC, Other) for every unique candidate.
+   - Finally, they run `/confirm-spotlight` to automatically enforce quotas (2 Marvel, 2 DC, 2 Other, 2 Wildcards) and limits (1-per-creator). The bot will intercede and prompt the admin with a Tiebreaker UI if any manual resolutions are required before saving the final Spotlight Roster.
+
 ## Setup Instructions
 
 ### 1. Installation
