@@ -1,5 +1,7 @@
 import os
+
 from google.cloud import firestore
+
 
 class MCPFirestore:
     def __init__(self):

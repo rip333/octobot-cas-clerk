@@ -1,6 +1,9 @@
 import os
+
 from google import genai
+
 from mcp_firestore import MCPFirestore
+
 
 class GeminiAgent:
     def __init__(self):
@@ -11,6 +14,9 @@ class GeminiAgent:
         """
         Use Gemini Flash Latest to extract intent and invoke MCPFirestore tools.
         """
+        if len(message_text) > 1000:
+            message_text = message_text[:1000] + "... (truncated)"
+            
         system_instruction = f"""
         You are the CAP Silent Secretary, processing nominations in a Marvel Champions LCG Discord thread.
 
@@ -34,28 +40,51 @@ class GeminiAgent:
         
         from google.genai import types
         
+        actions_taken = []
+        
+        def get_rules_tool():
+            """Read the nomination rules."""
+            actions_taken.append({"action": "get_rules"})
+            return self.firestore_tool.get_rules()
+            
+        def get_nominations_tool():
+            """List current nominations."""
+            actions_taken.append({"action": "get_nominations"})
+            return self.firestore_tool.get_nominations()
+            
+        def add_nomination_tool(nominator_id: str, nominator_name: str, nominee_name: str, category: str):
+            """Add a nomination. category must be EXACTLY "HERO" or "ENCOUNTER"."""
+            actions_taken.append({"action": "add_nomination", "nominee": nominee_name, "category": category})
+            return self.firestore_tool.add_nomination(nominator_id, nominator_name, nominee_name, category)
+            
+        def remove_nomination_tool(nomination_id: str):
+            """Remove a nomination by its document ID."""
+            actions_taken.append({"action": "remove_nomination", "nomination_id": nomination_id})
+            return self.firestore_tool.remove_nomination(nomination_id)
+            
+        def log_error_tool(text: str):
+            """Log a nomination error with a reason."""
+            actions_taken.append({"action": "log_error", "text": text})
+            return self.firestore_tool.log_error(text)
+        
         response = self.client.models.generate_content(
             model='gemini-flash-latest',
             contents=system_instruction,
             config=types.GenerateContentConfig(
                 tools=[
-                    self.firestore_tool.get_rules,
-                    self.firestore_tool.get_nominations,
-                    self.firestore_tool.add_nomination,
-                    self.firestore_tool.remove_nomination,
-                    self.firestore_tool.log_error
+                    get_rules_tool,
+                    get_nominations_tool,
+                    add_nomination_tool,
+                    remove_nomination_tool,
+                    log_error_tool
                 ],
                 temperature=0.1,
             )
         )
         
-        # In a real app we'd iterate over function calls if using manual loop, 
-        # but modern SDK with tools might auto-call if enabled, or we parse response.function_calls.
-        # Note: If automatic function calling isn't enabled by default, you may need a loop.
-        
-        return {"status": "success", "gemini_response": response.text}
+        return {"status": "success", "gemini_response": response.text, "actions": actions_taken}
 
-    def generate_cycle_intro(self, cycle_number: int) -> str:
+    def generate_cycle_intro(self, cycle_number: int, role_mention: str = "@Community Seal Updates") -> str:
         """
         Use Gemini Flash to generate a new thread introduction for the current cycle.  **Be creative in this section!**
         """
@@ -64,7 +93,7 @@ class GeminiAgent:
 Generate an introduction for the "Cycle {cycle_number} - Nominations" Discord thread. 
 
 Example:
-"Hey @Community Seal Updates!  
+"Hey {role_mention}!  
 *Create something to fill some space with a random fact or interesting tidbit regarding Marvel, DC, or other superhero media.  Be creative.  Format it in italics.*
 
 Welcome to Cycle {cycle_number}! This thread will be used for nominations for Cycle {cycle_number}! Please read over the rules here and then nominate away!

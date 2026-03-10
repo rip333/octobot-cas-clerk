@@ -1,5 +1,7 @@
 import os
+
 from dotenv import load_dotenv
+
 from mcp_firestore import MCPFirestore
 
 # Load environment variables just in case

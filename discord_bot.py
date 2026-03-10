@@ -1,8 +1,8 @@
-import discord
 import os
-from dotenv import load_dotenv
 
+import discord
 from discord.ext import commands
+from dotenv import load_dotenv
 
 load_dotenv()
 
@@ -33,11 +33,13 @@ async def on_ready():
     print(f'Logged in as {client.user}')
 
 import time
+
 import aiohttp
 
 user_last_msg_time = {}
 
 import asyncio
+
 from gemini_agent import GeminiAgent
 
 agent = GeminiAgent()
@@ -79,6 +81,13 @@ async def on_message(message):
             message.author.name
         )
         print(f"Gemini Outcome: {result.get('gemini_response')}")
+        
+        actions = result.get('actions', [])
+        for action in actions:
+            if action.get('action') == 'add_nomination':
+                await message.add_reaction("📥")
+                break
+                
     except Exception as e:
         print(f"Failed to process via Gemini: {e}")
 

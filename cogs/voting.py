@@ -107,6 +107,9 @@ class Voting(commands.Cog):
         self.db.update_cycle_metadata(metadata)
         self.bot.nomination_state = "voting"
         
+        deleted_count = self.db.clear_votes()
+        print(f"Deleted {deleted_count} votes from table.")
+        
         await interaction.followup.send(
             "**📢 Nominations are closed! Voting is now open!**\n\n"
             "Use the `/vote` command to cast your ballot. You may vote for up to 10 Heroes and 2 Encounters."
@@ -197,7 +200,6 @@ class Voting(commands.Cog):
         if not encounter_text:
             encounter_text = "No encounter votes."
             
-        # Split into chunks if too long (max 1024 chars per field)
         def split_text(text):
             return [text[i:i+1024] for i in range(0, len(text), 1024)]
             

@@ -1,5 +1,7 @@
-import functions_framework
 import json
+
+import functions_framework
+
 from gemini_agent import GeminiAgent
 
 agent = GeminiAgent()

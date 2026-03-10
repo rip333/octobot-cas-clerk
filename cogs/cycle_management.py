@@ -1,10 +1,12 @@
-import discord
-from discord.ext import commands
-from discord import app_commands
 import asyncio
 
-from mcp_firestore import MCPFirestore
+import discord
+from discord import app_commands
+from discord.ext import commands
+
 from gemini_agent import GeminiAgent
+from mcp_firestore import MCPFirestore
+
 
 class CycleManagement(commands.Cog):
     def __init__(self, bot):
@@ -20,16 +22,18 @@ class CycleManagement(commands.Cog):
         metadata = self.db.get_cycle_metadata()
         current_cycle_number = int(metadata.get("number"))
         
-        # Clear existing nominations
         deleted_count = self.db.clear_nominations()
         print(f"Deleted {deleted_count} nominations from table.")
         
-        # Ask Gemini to generate the new intro message
+        role = discord.utils.get(interaction.guild.roles, name="Community Seal Updates")
+        role_mention = role.mention if role else "@Community Seal Updates"
+
         loop = asyncio.get_running_loop()
         intro_text = await loop.run_in_executor(
             None,
             self.agent.generate_cycle_intro,
-            current_cycle_number
+            current_cycle_number,
+            role_mention
         )
         
         channel = interaction.channel
@@ -39,16 +43,15 @@ class CycleManagement(commands.Cog):
 
         thread_name = f"Cycle {current_cycle_number} - Nominations"
         
-        # Create a public thread
         thread = await channel.create_thread(
             name=thread_name,
-            type=discord.ChannelType.public_thread
+            type=discord.ChannelType.public_thread,
+            slowmode_delay=60,
+            auto_archive_duration=10080
         )
         
-        # Send the generated message to the new thread
         await thread.send(intro_text)
         
-        # Update cycle_metadata with the new thread ID
         new_metadata = {
             "number": current_cycle_number,
             "active": True,
