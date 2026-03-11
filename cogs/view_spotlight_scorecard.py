@@ -29,7 +29,7 @@ class ScorecardSelectView(discord.ui.View):
         self.add_item(self.select)
         
     async def select_callback(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=true)
+        await interaction.response.defer(ephemeral=True)
         form_id = self.select.values[0]
         
         # Find the form title from the data

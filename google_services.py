@@ -82,6 +82,47 @@ class GoogleServices:
             return item.replace("\n", " ").replace("\r", " ")
         return item
 
+    def _get_or_create_cycle_folder(self, cycle_number: int) -> str:
+        """
+        Gets or creates a folder named 'Spotlight Cycle {cycle_number}'.
+        If GOOGLE_DRIVE_FOLDER_ID is set in env, it looks/creates inside that parent.
+        Otherwise, it does so at the root of the user's Drive.
+        """
+        folder_name = f"Spotlight Cycle {cycle_number}"
+        parent_id = os.environ.get("GOOGLE_DRIVE_FOLDER_ID", "").strip()
+        
+        # Build query
+        query = f"mimeType='application/vnd.google-apps.folder' and name='{folder_name}' and trashed=false"
+        if parent_id:
+            query += f" and '{parent_id}' in parents"
+            
+        results = self.drive.files().list(
+            q=query, 
+            fields="files(id, name)",
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True
+        ).execute()
+        files = results.get('files', [])
+        
+        if files:
+            return files[0]['id']
+            
+        # Create it mapping to root (or parent_id if available)
+        file_metadata = {
+            'name': folder_name,
+            'mimeType': 'application/vnd.google-apps.folder'
+        }
+        if parent_id:
+            file_metadata['parents'] = [parent_id]
+            
+        folder = self.drive.files().create(
+            body=file_metadata, 
+            fields='id',
+            supportsAllDrives=True
+        ).execute()
+        
+        return folder.get('id')
+
     def copy_form_for_set(self, set_name: str, cycle_number: int, creator_name: str) -> dict:
         """
         Create a new Google Form that mirrors the template form's questions.
@@ -125,22 +166,24 @@ class GoogleServices:
                 body={"requests": requests},
             ).execute()
 
-        # Move to the shared folder if configured
-        folder_id = os.environ.get("GOOGLE_DRIVE_FOLDER_ID", "")
-        if folder_id:
-            try:
-                file_meta = self.drive.files().get(
-                    fileId=form_id, fields="parents"
-                ).execute()
-                current_parents = ",".join(file_meta.get("parents", []))
-                self.drive.files().update(
-                    fileId=form_id,
-                    addParents=folder_id,
-                    removeParents=current_parents,
-                    fields="id, parents",
-                ).execute()
-            except Exception as e:
-                print(f"Warning: Failed to move form {form_id} to folder {folder_id}: {e}")
+        # Move to the cycle folder
+        try:
+            folder_id = self._get_or_create_cycle_folder(cycle_number)
+            file_meta = self.drive.files().get(
+                fileId=form_id, 
+                fields="parents",
+                supportsAllDrives=True
+            ).execute()
+            current_parents = ",".join(file_meta.get("parents", []))
+            self.drive.files().update(
+                fileId=form_id,
+                addParents=folder_id,
+                removeParents=current_parents,
+                fields="id, parents",
+                supportsAllDrives=True
+            ).execute()
+        except Exception as e:
+            print(f"Warning: Failed to move form {form_id} to folder: {e}")
 
         edit_url = f"https://docs.google.com/forms/d/{form_id}/edit"
         response_url = f"https://docs.google.com/forms/d/{form_id}/viewform"
