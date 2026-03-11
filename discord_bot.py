@@ -5,9 +5,11 @@ from discord.ext import commands
 from dotenv import load_dotenv
 
 load_dotenv()
+ALLOWED_GUILDS = [gid.strip() for gid in os.getenv("ALLOWED_GUILDS", "").split(",") if gid.strip()]
 
 intents = discord.Intents.default()
 intents.message_content = True
+intents.guilds = True # Ensure guild events are tracked
 client = commands.Bot(command_prefix="!", intents=intents)
 
 import traceback
@@ -59,6 +61,24 @@ async def setup_hook():
 @client.event
 async def on_ready():
     print(f'Logged in as {client.user}')
+    if ALLOWED_GUILDS:
+        print(f"Server Lockdown active. Allowed Guilds: {ALLOWED_GUILDS}")
+
+@client.event
+async def on_guild_join(guild):
+    if ALLOWED_GUILDS and str(guild.id) not in ALLOWED_GUILDS:
+        print(f"Joined unauthorized guild: {guild.name} ({guild.id}). Leaving...")
+        await guild.leave()
+
+@client.tree.interaction_check
+async def global_guild_check(interaction: discord.Interaction) -> bool:
+    if not ALLOWED_GUILDS:
+        return True
+    if str(interaction.guild_id) in ALLOWED_GUILDS:
+        return True
+    
+    await interaction.response.send_message("This bot is not authorized to run on this server.", ephemeral=True)
+    return False
 
 import time
 
@@ -75,6 +95,10 @@ agent = GeminiAgent()
 @client.event
 async def on_message(message):
     if message.author == client.user:
+        return
+
+    # Server Lockdown Check
+    if ALLOWED_GUILDS and str(message.guild.id if message.guild else "") not in ALLOWED_GUILDS:
         return
 
     # Thread ID check

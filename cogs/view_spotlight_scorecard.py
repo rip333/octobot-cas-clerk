@@ -59,7 +59,7 @@ class ScorecardSelectView(discord.ui.View):
             # Fetch responses
             responses = gs.get_form_responses(form_id)
             if not responses:
-                await interaction.followup.send(f"**{form_title}**\n\nNo responses have been submitted yet.")
+                await interaction.followup.send(f"**{form_title}**\n\nNo responses have been submitted yet.", ephemeral=True)
                 return
                 
             # Tally scores
@@ -157,10 +157,10 @@ class ScorecardSelectView(discord.ui.View):
                     embed.add_field(name="Seal of Approval Status", value=f"❌ **FAIL** - Only {pass_rate:.1f}% of reviews scored 8.0 or higher (Requires 70%)", inline=False)
                     embed.color = discord.Color.red()
                 
-            await interaction.followup.send(embed=embed)
+            await interaction.followup.send(embed=embed, ephemeral=True)
             
         except Exception as e:
-            await interaction.followup.send(f"Error fetching data from Google Forms API:\n{e}")
+            await interaction.followup.send(f"Error fetching data from Google Forms API:\n{e}", ephemeral=True)
 
 class ViewSpotlightScorecard(commands.Cog):
     def __init__(self, bot):
@@ -182,7 +182,7 @@ class ViewSpotlightScorecard(commands.Cog):
             return
             
         view = ScorecardSelectView(forms_list, interaction)
-        await interaction.followup.send("Select a spotlight set below to view its scorecard results:", view=view)
+        await interaction.followup.send("Select a spotlight set below to view its scorecard results:", view=view, ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(ViewSpotlightScorecard(bot))

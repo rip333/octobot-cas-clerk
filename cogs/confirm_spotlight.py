@@ -5,6 +5,30 @@ import asyncio
 from mcp_firestore import MCPFirestore
 from google_services import GoogleServices
 
+def build_roster_embed(roster: list, title: str) -> discord.Embed:
+    embed = discord.Embed(title=title, color=discord.Color.green())
+    
+    def format_entry(entry):
+        base = f"- {entry['set_name']}"
+        if entry.get('response_url'):
+            base = f"{base} — [Form Link]({entry['response_url']})"
+        return base
+        
+    marvel_heroes = [format_entry(h) for h in roster if h['category'] == 'Marvel']
+    dc_heroes = [format_entry(h) for h in roster if h['category'] == 'DC']
+    other_heroes = [format_entry(h) for h in roster if h['category'] == 'Other']
+    wildcard_heroes = [format_entry(h) for h in roster if h['category'] == 'Wildcard']
+    encounters = [format_entry(h) for h in roster if h['category'] == 'Encounter']
+    
+    embed.add_field(name="Marvel", value="\n".join(marvel_heroes) if marvel_heroes else "None", inline=False)
+    embed.add_field(name="DC", value="\n".join(dc_heroes) if dc_heroes else "None", inline=False)
+    embed.add_field(name="Other", value="\n".join(other_heroes) if other_heroes else "None", inline=False)
+    embed.add_field(name="Wildcards", value="\n".join(wildcard_heroes) if wildcard_heroes else "None", inline=False)
+    embed.add_field(name="Encounters", value="\n".join(encounters) if encounters else "None", inline=False)
+    
+    return embed
+
+
 class TiebreakerView(discord.ui.View):
     def __init__(self, title: str, description: str, options: list, num_to_select: int):
         super().__init__(timeout=None)
@@ -92,7 +116,7 @@ class FinalConfirmView(discord.ui.View):
             status_lines.append(f"\n⚠️ Error creating forms or saving roster: {e}")
 
         # 4. Generate Feedback Thread + Update Status
-        form_output_block = "\n".join(status_lines)
+        form_output_block = "".join(status_lines)
         await interaction.edit_original_response(content=form_output_block, view=self)
 
         try:
@@ -113,11 +137,11 @@ class FinalConfirmView(discord.ui.View):
                 
                 # Send welcome message
                 welcome_msg = (
-                    f"Welcome to the Scorecard Discussion for **Cycle {self.cycle_number}**!\n\n"
-                    "Below are the links to submit your reviews for the confirmed Spotlight Sets:\n\n"
-                    f"{form_output_block.replace('**✅ Spotlight roster and Google Forms created successfully!**', '')}"
+                    f"Congratulations on the confirmed Spotlight Sets for **Cycle {self.cycle_number}**!\n\n"
+                    "Below are the links to submit your reviews for the confirmed Spotlight Sets:"
                 )
-                await thread.send(welcome_msg)
+                roster_embed = build_roster_embed(self.roster, f"Cycle {self.cycle_number} Scorecards")
+                await thread.send(welcome_msg, embed=roster_embed)
                 
         except Exception as e:
             await interaction.followup.send(f"⚠️ Error changing cycle to `reviewing` or creating thread: {e}", ephemeral=True)
@@ -369,19 +393,7 @@ class ConfirmSpotlight(commands.Cog):
             final_roster.append(format_hero_data(h['name'], 'Wildcard'))
 
         # STEP 5: Final Confirmation
-        embed = discord.Embed(title="Final Spotlight Roster Preview", color=discord.Color.green())
-        
-        marvel_heroes = [h['set_name'] for h in final_roster if h['category'] == 'Marvel']
-        dc_heroes = [h['set_name'] for h in final_roster if h['category'] == 'DC']
-        other_heroes = [h['set_name'] for h in final_roster if h['category'] == 'Other']
-        wildcard_heroes = [h['set_name'] for h in final_roster if h['category'] == 'Wildcard']
-        encounters = [h['set_name'] for h in final_roster if h['category'] == 'Encounter']
-        
-        embed.add_field(name="Marvel", value="\n".join(f"- {h}" for h in marvel_heroes) if marvel_heroes else "None", inline=False)
-        embed.add_field(name="DC", value="\n".join(f"- {h}" for h in dc_heroes) if dc_heroes else "None", inline=False)
-        embed.add_field(name="Other", value="\n".join(f"- {h}" for h in other_heroes) if other_heroes else "None", inline=False)
-        embed.add_field(name="Wildcards", value="\n".join(f"- {h}" for h in wildcard_heroes) if wildcard_heroes else "None", inline=False)
-        embed.add_field(name="Encounters", value="\n".join(f"- {h}" for h in encounters) if encounters else "None", inline=False)
+        embed = build_roster_embed(final_roster, "Final Spotlight Roster Preview")
         
         view = FinalConfirmView(self.db, cycle_number, final_roster, interaction)
         await interaction.followup.send("Please verify the roster below and confirm to save to the database:", embed=embed, view=view, ephemeral=True)
