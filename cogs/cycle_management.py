@@ -1,10 +1,7 @@
-import asyncio
-
 import discord
 from discord import app_commands
 from discord.ext import commands
 
-from gemini_agent import GeminiAgent
 from mcp_firestore import MCPFirestore
 
 
@@ -12,7 +9,6 @@ class CycleManagement(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.db = MCPFirestore()
-        self.agent = GeminiAgent()
 
     @app_commands.command(name="start-nominations", description="Create and monitor nominations thread for CAS cycle.")
     @app_commands.default_permissions(manage_channels=True)
@@ -28,12 +24,13 @@ class CycleManagement(commands.Cog):
         role = discord.utils.get(interaction.guild.roles, name="Community Seal Updates")
         role_mention = role.mention if role else "@Community Seal Updates"
 
-        loop = asyncio.get_running_loop()
-        intro_text = await loop.run_in_executor(
-            None,
-            self.agent.generate_cycle_intro,
-            current_cycle_number,
-            role_mention
+        intro_text = (
+            f"Hey {role_mention}!\n\n"
+            f"Welcome to Cycle {current_cycle_number}! "
+            f"This thread will be used for nominations for Cycle {current_cycle_number}!\n\n"
+            "**Rules**\n"
+            "\u2022 You may nominate 2 Hero sets and 1 Encounter set. "
+            "Please include \"hero\" or \"encounter\" in your nomination to specify which type of set you are nominating."
         )
         
         channel = interaction.channel

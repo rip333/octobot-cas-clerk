@@ -31,7 +31,14 @@ class GeminiAgent:
         You have tools to:
         - `get_rules()`: Read the nomination rules.
         - `get_nominations()`: List current nominations.
-        - `add_nomination(nominator_id="...", nominator_name="...", nominee_name="...", category="...", creator_name="...", creator_discord_id="...", ip_category="...")`: Add a nomination. category must be EXACTLY "HERO" or "ENCOUNTER". nominator_id is the current user's ID and nominator_name is the current user's name. Extract `creator_name` and an optional `creator_discord_id` (if they mention a user like <@12345678>) from the nomination. If a discord ID mention is present, `creator_discord_id` should hold the raw mention string. `creator_name` should be their clean display name without the @ symbol. `ip_category` should be your best guess of the IP ("Marvel", "DC", or "Other") based on superhero media knowledge. If ambiguous or unknown, pass an empty string "".
+        - `add_nomination(nominator_id="...", nominator_name="...", nominee_name="...", category="...", creator_name="...", creator_discord_id="...", ip_category="...")`: 
+            Add a nomination. category must be either "Hero" or "Encounter". 
+            nominator_id is the current user's ID and nominator_name is the current user's name. 
+            Extract `creator_name` and an optional `creator_discord_id` (if they mention a user like <@12345678>) from the nomination. 
+            If a discord ID mention is present, `creator_discord_id` should hold the raw mention string. 
+            `creator_name` should be their clean display name without the @ symbol. 
+            `ip_category` should be your best guess of the IP ("Marvel", "DC", or "Other") based on superhero media knowledge. 
+            If the category, ip, or creator is ambiguous or unknown, pass an empty string "".
         - `remove_nomination(nomination_id="...")`: Remove a nomination by its document ID.
         - `log_error(text="...")`: Log a nomination error with a reason.
 
@@ -84,32 +91,4 @@ class GeminiAgent:
         
         return {"status": "success", "gemini_response": response.text, "actions": actions_taken}
 
-    def generate_cycle_intro(self, cycle_number: int, role_mention: str = "@Community Seal Updates") -> str:
-        """
-        Use Gemini Flash to generate a new thread introduction for the current cycle.  **Be creative in this section!**
-        """
-
-        prompt = f"""
-Generate an introduction for the "Cycle {cycle_number} - Nominations" Discord thread. 
-
-Example:
-"Hey {role_mention}!  
-*Create something to fill some space with a random fact or interesting tidbit regarding Marvel, DC, or other superhero media.  Be creative.  Format it in italics.*
-
-Welcome to Cycle {cycle_number}! This thread will be used for nominations for Cycle {cycle_number}!
-
-Rules
-• You may nominate 2 Hero sets and 1 Encounter set. Please include "hero" or "encounter" in your nomination to specify which type of set you are nominating.
-
-Output *only* the generated introduction text.
-"""
-        from google.genai import types
-        response = self.client.models.generate_content(
-            model='gemini-flash-latest',
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                temperature=1.4
-            )
-        )
-        return response.text.strip()
 

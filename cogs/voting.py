@@ -125,16 +125,20 @@ class VotingView(discord.ui.View):
         for select in self.hero_selects:
             selected_heroes.extend(select.values)
             
-        # Validate totals
+        # Validate totals — defer first so the original voting UI stays visible,
+        # then send the error as an ephemeral followup (dismissable popup).
         if len(selected_heroes) > 10:
-            await interaction.response.send_message(f"Hero maximum is 10.", ephemeral=True)
+            await interaction.response.defer()
+            await interaction.followup.send("❌ **Error:** Hero maximum is 10.", ephemeral=True)
             return
         if len(selected_encounters) > 2:
-             await interaction.response.send_message(f"Encounter maximum is 2.", ephemeral=True)
-             return
+            await interaction.response.defer()
+            await interaction.followup.send("❌ **Error:** Encounter maximum is 2.", ephemeral=True)
+            return
         if len(selected_heroes) == 0 and len(selected_encounters) == 0:
-             await interaction.response.send_message("Please make a selection.", ephemeral=True)
-             return
+            await interaction.response.defer()
+            await interaction.followup.send("❌ **Error:** Please make at least one selection before submitting.", ephemeral=True)
+            return
 
         # Record to Firestore
         user_id = str(interaction.user.id)
