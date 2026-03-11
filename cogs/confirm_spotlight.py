@@ -52,11 +52,14 @@ class FinalConfirmView(discord.ui.View):
 
     @discord.ui.button(label="Confirm & Save to Roster", style=discord.ButtonStyle.success)
     async def btn_confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
-        # Defer first — Google API calls can take several seconds
-        await interaction.response.defer(ephemeral=True)
-
+        # Disable buttons and show processing message
         for child in self.children:
             child.disabled = True
+            
+        await interaction.response.edit_message(
+            content="**⏳ Processing roster and creating Google Forms... This may take a minute.**", 
+            view=self
+        )
 
         # 1. Save the roster to Firestore
         self.db.save_spotlight_roster(self.cycle_number, self.roster)
@@ -75,8 +78,7 @@ class FinalConfirmView(discord.ui.View):
             for entry in self.roster:
                 try:
                     creator_name = entry.get("creatorName", "Unknown")
-                    sheet_result = gs.create_cycle_spreadsheet(entry["name"], creator_name, self.cycle_number)
-                    form_result = gs.copy_form_for_set(entry["name"], self.cycle_number)
+                    form_result = gs.copy_form_for_set(entry["name"], self.cycle_number, creator_name)
                     
                     forms_data.append({
                         "name": entry["name"],
@@ -84,16 +86,14 @@ class FinalConfirmView(discord.ui.View):
                         "form_id": form_result["form_id"],
                         "title": form_result["title"],
                         "edit_url": form_result["edit_url"],
-                        "response_url": form_result["response_url"],
-                        "spreadsheet_id": sheet_result["spreadsheet_id"],
-                        "spreadsheet_url": sheet_result["spreadsheet_url"],
+                        "response_url": form_result["response_url"]
                     })
                     status_lines.append(
                         f"- **{entry['name']}** ({entry['category']}):\n"
-                        f"  [Form]({form_result['response_url']}) | [Sheet]({sheet_result['spreadsheet_url']})"
+                        f"  [Form]({form_result['response_url']})"
                     )
                 except Exception as form_err:
-                    status_lines.append(f"- ⚠️ **{entry['name']}**: Form/Sheet creation failed — {form_err}")
+                    status_lines.append(f"- ⚠️ **{entry['name']}**: Form creation failed — {form_err}")
 
             # 3. Persist form/sheet data to Firestore
             self.db.save_cycle_forms(self.cycle_number, "", "", forms_data)

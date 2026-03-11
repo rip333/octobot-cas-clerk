@@ -55,7 +55,6 @@ class GoogleServices:
         creds = _build_user_credentials()
         self.drive = build("drive", "v3", credentials=creds)
         self.forms = build("forms", "v1", credentials=creds)
-        self.sheets = build("sheets", "v4", credentials=creds)
 
     # ------------------------------------------------------------------
     # Forms helpers
@@ -82,7 +81,7 @@ class GoogleServices:
             return item.replace("\n", " ").replace("\r", " ")
         return item
 
-    def copy_form_for_set(self, set_name: str, cycle_number: int) -> dict:
+    def copy_form_for_set(self, set_name: str, cycle_number: int, creator_name: str) -> dict:
         """
         Create a new Google Form that mirrors the template form's questions.
         Uses Forms API create + batchUpdate.
@@ -92,11 +91,14 @@ class GoogleServices:
             edit_url     — link to edit the form (admin use)
             response_url — public response URL
         """
-        title = f"Cycle {cycle_number} — {set_name} Scorecard"
+        title = f"cycle {cycle_number} - {set_name} by {creator_name}"
 
         # 1. Create a blank form with the right title
         new_form = self.forms.forms().create(body={
-            "info": {"title": title}
+            "info": {
+                "title": title,
+                "documentTitle": title
+            }
         }).execute()
         form_id = new_form["formId"]
 
@@ -150,34 +152,4 @@ class GoogleServices:
         }
 
 
-    def create_cycle_spreadsheet(self, set_name: str, creator_name: str, cycle_number: int) -> dict:
-        """
-        Create a new Google Spreadsheet for this cycle's scorecards.
-        If GOOGLE_DRIVE_FOLDER_ID is set, moves the spreadsheet into that folder.
-        Returns { spreadsheet_id, spreadsheet_url }.
-        """
-        title = f"Seal Scorecard for {set_name} ({creator_name}), Cycle {cycle_number}"
-        spreadsheet = self.sheets.spreadsheets().create(body={
-            "properties": {"title": title},
-        }).execute()
-        spreadsheet_id = spreadsheet["spreadsheetId"]
 
-        # Move to the shared folder if configured
-        folder_id = os.environ.get("GOOGLE_DRIVE_FOLDER_ID", "")
-        if folder_id:
-            file_meta = self.drive.files().get(
-                fileId=spreadsheet_id, fields="parents"
-            ).execute()
-            current_parents = ",".join(file_meta.get("parents", []))
-            self.drive.files().update(
-                fileId=spreadsheet_id,
-                addParents=folder_id,
-                removeParents=current_parents,
-                fields="id, parents",
-            ).execute()
-
-        spreadsheet_url = f"https://docs.google.com/spreadsheets/d/{spreadsheet_id}/edit"
-        return {
-            "spreadsheet_id": spreadsheet_id,
-            "spreadsheet_url": spreadsheet_url,
-        }
