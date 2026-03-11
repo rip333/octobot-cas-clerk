@@ -95,9 +95,6 @@ class AssignIP(commands.Cog):
         results = self.db.get_all_votes()
         noms = self.db.get_nominations()
         
-        # Get previously cached IPs
-        ip_cache = self.db.get_ip_assignments(cycle_number)
-        
         nom_map = {}
         nom_ips = {}
         for data in noms:
@@ -116,11 +113,9 @@ class AssignIP(commands.Cog):
                 else:
                     set_name = hero_obj.split(' — ')[0]
                 disp = nom_map.get(set_name, set_name)
-                # Auto cache if the LLM successfully guessed the IP
-                if disp in nom_ips:
-                    if disp not in ip_cache:
-                        self.db.save_ip_assignment(cycle_number, disp, nom_ips[disp])
-                elif disp not in ip_cache:
+                
+                # If the AI did not automatically successfully guess the IP, add to candidates
+                if disp not in nom_ips:
                     unique_candidates.add(disp)
                     
             for encounter_obj in data.get('encounters', []):
@@ -129,10 +124,8 @@ class AssignIP(commands.Cog):
                 else:
                     set_name = encounter_obj.split(' — ')[0]
                 disp = nom_map.get(set_name, set_name)
-                if disp in nom_ips:
-                    if disp not in ip_cache:
-                        self.db.save_ip_assignment(cycle_number, disp, nom_ips[disp])
-                elif disp not in ip_cache:
+                
+                if disp not in nom_ips:
                     unique_candidates.add(disp)
                 
         # Sorted candidate list that strips out the already successfully guessed sets 

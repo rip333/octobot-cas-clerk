@@ -182,30 +182,31 @@ class MCPFirestore:
 
     def save_ip_assignment(self, cycle_number: int, set_name: str, ip_category: str) -> bool:
         """
-        Record the IP assignment for a specific set in a cycle.
+        Record the IP assignment for a specific set in the nominations collection directly.
         """
-        doc_id = f"{cycle_number}_{set_name}".replace('/', '_')
-        doc_ref = self.db.collection('ip_assignments').document(doc_id)
-        doc_ref.set({
-            'cycle': int(cycle_number),
-            'set_name': str(set_name),
-            'ip_category': str(ip_category),
-            'timestamp': firestore.SERVER_TIMESTAMP
-        }, merge=True)
-        return True
-
-    def get_ip_assignments(self, cycle_number: int) -> dict:
-        """
-        Get all IP assignments for a specific cycle. Returns a dict mapping set_name to ip_category.
-        """
-        query = self.db.collection('ip_assignments').where('cycle', '==', int(cycle_number))
-        results = query.stream()
-        assignments = {}
-        for doc in results:
-            data = doc.to_dict()
-            set_name = data.get('set_name', data.get('nominee', 'Unknown'))
-            assignments[set_name] = data.get('ip_category', 'Other')
-        return assignments
+        # Batch update all matching nominations
+        query = self.db.collection('nominations').where('set_name', '==', set_name)
+        docs = query.stream()
+        
+        batch = self.db.batch()
+        count = 0
+        for doc in docs:
+            batch.update(doc.reference, {"ip_category": ip_category})
+            count += 1
+            
+        if count == 0:
+            # Fallback for old schema
+            query2 = self.db.collection('nominations').where('nomineeName', '==', set_name)
+            docs2 = query2.stream()
+            for doc in docs2:
+                batch.update(doc.reference, {"ip_category": ip_category})
+                count += 1
+                
+        if count > 0:
+            batch.commit()
+            return True
+            
+        return False
 
     def save_cycle_forms(self, cycle_number: int, spreadsheet_id: str, spreadsheet_url: str, forms: list) -> bool:
         """

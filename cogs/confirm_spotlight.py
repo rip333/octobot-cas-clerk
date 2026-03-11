@@ -135,12 +135,13 @@ class ConfirmSpotlight(commands.Cog):
         
         results = self.db.get_all_votes()
         noms = self.db.get_nominations()
-        ip_cache = self.db.get_ip_assignments(cycle_number)
         
         nom_map = {}
+        ip_cache = {}
         for data in noms:
             set_name = data.get('set_name', data.get('nomineeName', 'Unknown'))
             nom_map[set_name] = data
+            ip_cache[set_name] = data.get('ip_category', 'Other')
             
         # Tally Raw Votes
         hero_counts = {}
