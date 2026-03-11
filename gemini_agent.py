@@ -31,7 +31,7 @@ class GeminiAgent:
         You have tools to:
         - `get_rules()`: Read the nomination rules.
         - `get_nominations()`: List current nominations.
-        - `add_nomination(nominator_id="...", nominator_name="...", nominee_name="...", category="...", creator_name="...", creator_discord_id="...")`: Add a nomination. category must be EXACTLY "HERO" or "ENCOUNTER". nominator_id is the current user's ID and nominator_name is the current user's name. Extract `creator_name` and an optional `creator_discord_id` (if they mention a user like <@12345678>) from the nomination. If a discord ID mention is present, `creator_discord_id` should hold the raw mention string. `creator_name` should be their clean display name without the @ symbol.
+        - `add_nomination(nominator_id="...", nominator_name="...", nominee_name="...", category="...", creator_name="...", creator_discord_id="...", ip_category="...")`: Add a nomination. category must be EXACTLY "HERO" or "ENCOUNTER". nominator_id is the current user's ID and nominator_name is the current user's name. Extract `creator_name` and an optional `creator_discord_id` (if they mention a user like <@12345678>) from the nomination. If a discord ID mention is present, `creator_discord_id` should hold the raw mention string. `creator_name` should be their clean display name without the @ symbol. `ip_category` should be your best guess of the IP ("Marvel", "DC", or "Other") based on superhero media knowledge. If ambiguous or unknown, pass an empty string "".
         - `remove_nomination(nomination_id="...")`: Remove a nomination by its document ID.
         - `log_error(text="...")`: Log a nomination error with a reason.
 
@@ -52,10 +52,10 @@ class GeminiAgent:
             actions_taken.append({"action": "get_nominations"})
             return self.firestore_tool.get_nominations()
             
-        def add_nomination_tool(nominator_id: str, nominator_name: str, nominee_name: str, category: str, creator_name: str = "", creator_discord_id: str = ""):
+        def add_nomination_tool(nominator_id: str, nominator_name: str, nominee_name: str, category: str, creator_name: str = "", creator_discord_id: str = "", ip_category: str = ""):
             """Add a nomination. category must be EXACTLY "HERO" or "ENCOUNTER"."""
             actions_taken.append({"action": "add_nomination", "nominee": nominee_name, "category": category})
-            return self.firestore_tool.add_nomination(nominator_id, nominator_name, nominee_name, category, creator_name, creator_discord_id)
+            return self.firestore_tool.add_nomination(nominator_id, nominator_name, nominee_name, category, creator_name, creator_discord_id, ip_category)
             
         def remove_nomination_tool(nomination_id: str):
             """Remove a nomination by its document ID."""

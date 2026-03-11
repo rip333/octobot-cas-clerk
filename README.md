@@ -13,11 +13,13 @@ Octobot CAS Clerk is the second arm of the bot - to help the homebrew community 
 ## Bot Commands & Workflow
 
 The Octobot manages the homebrew lifecycle through distinct phases:
-1. **Nominations Phase**: Users nominate Heroes and Encounters (monitored and parsed by a Gemini natural language agent).
-2. **Voting Phase**: Admins use `/start-voting` to lock nominations. Users cast their ballots using `/vote` (selecting up to 10 Heroes and 2 Encounters). Admins can view raw vote numbers anytime with `/tally-votes`.
+1. **Nominations Phase**: Users nominate Heroes and Encounters. A Gemini natural language agent monitors and parses the messages, and now **automatically attempts to guess the IP category** (Marvel, DC, Other) based on its superhero media knowledge to pre-label the data.
+2. **Voting Phase**: Admins use `/start-voting` to lock nominations. Users cast their ballots using `/vote` (selecting up to 10 Heroes and 2 Encounters). All voting interactions are ephemeral ("Only you can see this"). Admins can view raw vote numbers anytime with `/tally-votes`.
 3. **Spotlight Assignment Phase**: 
-   - After voting, admins use `/assign-ip` to interactively tag the IP (Marvel, DC, Other) for every unique candidate.
-   - Finally, they run `/confirm-spotlight` to automatically enforce quotas (2 Marvel, 2 DC, 2 Other, 2 Wildcards) and limits (1-per-creator). The bot will intercede and prompt the admin with a Tiebreaker UI if any manual resolutions are required before saving the final Spotlight Roster.
+   - **Pre-Categorization**: When an admin runs `/assign-ip`, the bot automatically syncs any correct AI-guessed categories.
+   - **Interactive Refinement**: The admin is then prompted to manually label only the remaining unique candidates. This view includes a **"Back" button** functionality to undo the previous assignment if a mistake is made.
+   - **Final Confirmation**: Admins run `/confirm-spotlight` to automatically enforce quotas (2 Marvel, 2 DC, 2 Other, 2 Wildcards) and limits (1-per-creator). The bot intercedes with a Tiebreaker UI if manual resolutions are required, then provides a finalized roster for saving.
+   - *Note: All admin commands and views in these phases are ephemeral for privacy.*
 
 ## Setup Instructions
 

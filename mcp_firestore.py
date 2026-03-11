@@ -22,7 +22,7 @@ class MCPFirestore:
             nominations.append(data)
         return nominations
 
-    def add_nomination(self, nominator_id: str, nominator_name: str, nominee_name: str, category: str, creator_name: str = "", creator_discord_id: str = "") -> str:
+    def add_nomination(self, nominator_id: str, nominator_name: str, nominee_name: str, category: str, creator_name: str = "", creator_discord_id: str = "", ip_category: str = "") -> str:
         """
         Add a new nomination to the nominations collection.
         """
@@ -38,6 +38,8 @@ class MCPFirestore:
             data['creatorName'] = creator_name
         if creator_discord_id:
             data['creatorDiscordId'] = creator_discord_id
+        if ip_category:
+            data['ip_category'] = ip_category
         doc_ref.set(data)
         return doc_ref.id
 

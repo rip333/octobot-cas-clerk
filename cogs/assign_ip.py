@@ -26,6 +26,11 @@ class AssignIPView(discord.ui.View):
         )
         embed.add_field(name="Current Candidate", value=f"**{nominee}**", inline=False)
         
+        # Disable 'Back' button if we are at the beginning
+        for child in self.children:
+            if isinstance(child, discord.ui.Button) and child.label == "Back":
+                child.disabled = (self.current_index == 0)
+        
         await interaction.response.edit_message(embed=embed, view=self)
 
     async def assign_ip(self, interaction: discord.Interaction, ip_category: str):
@@ -49,9 +54,15 @@ class AssignIPView(discord.ui.View):
     async def btn_other(self, interaction: discord.Interaction, button: discord.ui.Button):
         await self.assign_ip(interaction, "Other")
 
-    @discord.ui.button(label="Skip", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="Skip", style=discord.ButtonStyle.secondary, row=1)
     async def btn_skip(self, interaction: discord.Interaction, button: discord.ui.Button):
         self.current_index += 1
+        await self.update_message(interaction)
+        
+    @discord.ui.button(label="Back", style=discord.ButtonStyle.secondary, row=1)
+    async def btn_back(self, interaction: discord.Interaction, button: discord.ui.Button):
+        if self.current_index > 0:
+            self.current_index -= 1
         await self.update_message(interaction)
         
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.danger)
@@ -84,24 +95,41 @@ class AssignIP(commands.Cog):
         results = self.db.get_all_votes()
         noms = self.db.get_nominations()
         
+        # Get previously cached IPs
+        ip_cache = self.db.get_ip_assignments(cycle_number)
+        
         nom_map = {}
+        nom_ips = {}
         for data in noms:
             nominee = data.get('nomineeName', 'Unknown')
             creator_name = data.get('creatorName', '')
             display_name = f"{nominee} — {creator_name}" if creator_name else nominee
             nom_map[nominee] = display_name
+            # Gather LLM AI Guessed IPs
+            ip_cat = data.get('ip_category')
+            if ip_cat and ip_cat in ["Marvel", "DC", "Other"]:
+                nom_ips[display_name] = ip_cat
             
         unique_candidates = set()
         for data in results:
             for hero in data.get('heroes', []):
                 disp = nom_map.get(hero.split(" — ")[0], hero)
-                unique_candidates.add(disp)
+                # Auto cache if the LLM successfully guessed the IP
+                if disp in nom_ips:
+                    if disp not in ip_cache:
+                        self.db.save_ip_assignment(cycle_number, disp, nom_ips[disp])
+                elif disp not in ip_cache:
+                    unique_candidates.add(disp)
+                    
             for enc in data.get('encounters', []):
                 disp = nom_map.get(enc.split(" — ")[0], enc)
-                unique_candidates.add(disp)
+                if disp in nom_ips:
+                    if disp not in ip_cache:
+                        self.db.save_ip_assignment(cycle_number, disp, nom_ips[disp])
+                elif disp not in ip_cache:
+                    unique_candidates.add(disp)
                 
-        # Also check existing assignments to avoid duplicate work? Let's assign all for clarity, or filter existing.
-        # We will present all of them. 
+        # Sorted candidate list that strips out the already successfully guessed sets 
         candidates = sorted(list(unique_candidates))
         
         if not candidates:
@@ -109,6 +137,11 @@ class AssignIP(commands.Cog):
             return
             
         view = AssignIPView(self.db, candidates, cycle_number, interaction)
+        
+        # Before sending, let's manually trigger the update logic to sync button states
+        for child in view.children:
+            if isinstance(child, discord.ui.Button) and child.label == "Back":
+                child.disabled = True
         
         nominee = candidates[0]
         

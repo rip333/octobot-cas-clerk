@@ -142,7 +142,7 @@ class VotingView(discord.ui.View):
         self.db.record_user_vote(user_id, user_name, selected_heroes, selected_encounters)
         
         content = f"**✅ votes_submitted**"
-        await interaction.response.edit_message(content=content, view=self)
+        await interaction.response.edit_message(content=content, view=None)
 
 class Voting(commands.Cog):
     def __init__(self, bot):
@@ -249,7 +249,7 @@ class Voting(commands.Cog):
     @app_commands.command(name="tally-votes", description="Tally the current votes and display the winners.")
     @app_commands.default_permissions(manage_messages=True)
     async def tally_votes(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=False)
+        await interaction.response.defer(ephemeral=True)
         
         results = self.db.get_all_votes()
         noms = self.db.get_nominations()
