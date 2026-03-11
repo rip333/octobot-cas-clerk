@@ -21,6 +21,7 @@ from googleapiclient.discovery import build
 SCOPES = [
     "https://www.googleapis.com/auth/drive",
     "https://www.googleapis.com/auth/forms.body",
+    "https://www.googleapis.com/auth/forms.responses.readonly",
     "https://www.googleapis.com/auth/spreadsheets",
 ]
 
@@ -151,5 +152,12 @@ class GoogleServices:
             "response_url": response_url,
         }
 
+    def get_form(self, form_id: str) -> dict:
+        """Fetch the full form structure, including questions."""
+        return self.forms.forms().get(formId=form_id).execute()
 
+    def get_form_responses(self, form_id: str) -> list:
+        """Fetch all responses for a given form."""
+        result = self.forms.forms().responses().list(formId=form_id).execute()
+        return result.get('responses', [])
 

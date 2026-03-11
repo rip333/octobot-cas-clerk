@@ -42,6 +42,7 @@ async def setup_hook():
     await client.load_extension("cogs.voting")
     await client.load_extension("cogs.assign_ip")
     await client.load_extension("cogs.confirm_spotlight")
+    await client.load_extension("cogs.view_spotlight_scorecard")
     await client.tree.sync()
     
     from mcp_firestore import MCPFirestore
