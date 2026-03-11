@@ -10,7 +10,7 @@ class CycleManagement(commands.Cog):
         self.bot = bot
         self.db = MCPFirestore()
 
-    @app_commands.command(name="start-nominations", description="Create and monitor nominations thread for CAS cycle.")
+    @app_commands.command(name="start-nominations", description="Create and monitor nominations and voting thread for CAS cycle.")
     @app_commands.default_permissions(manage_channels=True)
     async def start_nominations(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
@@ -27,10 +27,11 @@ class CycleManagement(commands.Cog):
         intro_text = (
             f"Hey {role_mention}!\n\n"
             f"Welcome to Cycle {current_cycle_number}! "
-            f"This thread will be used for nominations for Cycle {current_cycle_number}!\n\n"
+            f"This thread will be used for nominations and voting for Cycle {current_cycle_number}!\n\n"
             "**Rules**\n"
-            "\u2022 You may nominate 2 Hero sets and 1 Encounter set. "
+            "\u2022 First, we will have nominations. You may nominate 2 Hero sets and 1 Encounter set. "
             "Please include \"hero\" or \"encounter\" in your nomination to specify which type of set you are nominating."
+            "\u2022 After nominations close (in about a week), we will close nominations and begin voting."
         )
         
         channel = interaction.channel
@@ -38,7 +39,7 @@ class CycleManagement(commands.Cog):
             await interaction.followup.send("This command must be used in a text or forum channel.", ephemeral=True)
             return
 
-        thread_name = f"Cycle {current_cycle_number} - Nominations"
+        thread_name = f"Cycle {current_cycle_number} - Nominations and Voting"
         
         thread = await channel.create_thread(
             name=thread_name,

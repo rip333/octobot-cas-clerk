@@ -102,7 +102,36 @@ class FinalConfirmView(discord.ui.View):
             status_lines.append(f"\n⚠️ Google API error: {e}")
             status_lines.append("Roster was saved to Firestore but forms were NOT created.")
 
-        await interaction.edit_original_response(content="\n".join(status_lines), view=self)
+        # 4. Generate Feedback Thread + Update Status
+        form_output_block = "\n".join(status_lines)
+        await interaction.edit_original_response(content=form_output_block, view=self)
+
+        try:
+            # Update state
+            metadata = self.db.get_cycle_metadata()
+            metadata["state"] = "reviewing"
+            self.db.save_cycle_metadata(metadata)
+            
+            # Create Thread
+            thread_name = f"Cycle {self.cycle_number} - Scorecards"
+            channel = interaction.channel
+            if isinstance(channel, discord.TextChannel) or isinstance(channel, discord.ForumChannel):
+                thread = await channel.create_thread(
+                    name=thread_name,
+                    type=discord.ChannelType.public_thread,
+                    auto_archive_duration=10080
+                )
+                
+                # Send welcome message
+                welcome_msg = (
+                    f"Welcome to the Scorecard Discussion for **Cycle {self.cycle_number}**!\n\n"
+                    "Below are the links to submit your reviews for the confirmed Spotlight Sets:\n\n"
+                    f"{form_output_block.replace('✅ Spotlight roster saved to Firestore!', '')}"
+                )
+                await thread.send(welcome_msg)
+                
+        except Exception as e:
+            await interaction.followup.send(f"⚠️ Error changing cycle to `reviewing` or creating thread: {e}", ephemeral=True)
 
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.danger)
     async def btn_cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
