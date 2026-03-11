@@ -61,33 +61,23 @@ class FinalConfirmView(discord.ui.View):
             view=self
         )
 
-        # 1. Save the roster to Firestore
-        self.db.save_spotlight_roster(self.cycle_number, self.roster)
-
-        # 2. Create Google Forms and Spreadsheet for this cycle
-        status_lines = ["**✅ Spotlight roster saved to Firestore!**", ""]
-        forms_data = []
-        spreadsheet_id = ""
-        spreadsheet_url = ""
+        # 1. Create Google Forms for each set in the roster
+        status_lines = ["**✅ Spotlight roster and Google Forms created successfully!**", ""]
 
         try:
             gs = GoogleServices()
 
-            # Clone template form and create a sheet for each set in the roster
             status_lines.append("**Scorecard Forms:**")
             for entry in self.roster:
                 try:
                     creator_name = entry.get("creatorName", "Unknown")
                     form_result = gs.copy_form_for_set(entry["set_name"], self.cycle_number, creator_name)
                     
-                    forms_data.append({
-                        "set_name": entry["set_name"],
-                        "category": entry["category"],
-                        "form_id": form_result["form_id"],
-                        "title": form_result["title"],
-                        "edit_url": form_result["edit_url"],
-                        "response_url": form_result["response_url"]
-                    })
+                    entry["form_id"] = form_result["form_id"]
+                    entry["title"] = form_result["title"]
+                    entry["edit_url"] = form_result["edit_url"]
+                    entry["response_url"] = form_result["response_url"]
+                    
                     status_lines.append(
                         f"- **{entry['set_name']}** ({entry['category']}):\n"
                         f"  [Form]({form_result['response_url']})"
@@ -95,12 +85,11 @@ class FinalConfirmView(discord.ui.View):
                 except Exception as form_err:
                     status_lines.append(f"- ⚠️ **{entry['set_name']}**: Form creation failed — {form_err}")
 
-            # 3. Persist form/sheet data to Firestore
-            self.db.save_cycle_forms(self.cycle_number, "", "", forms_data)
+            # 2. Save the final roster containing all form data into the single Firestore source of truth.
+            self.db.save_spotlight_roster(self.cycle_number, self.roster)
 
         except Exception as e:
-            status_lines.append(f"\n⚠️ Google API error: {e}")
-            status_lines.append("Roster was saved to Firestore but forms were NOT created.")
+            status_lines.append(f"\n⚠️ Error creating forms or saving roster: {e}")
 
         # 4. Generate Feedback Thread + Update Status
         form_output_block = "\n".join(status_lines)
@@ -126,7 +115,7 @@ class FinalConfirmView(discord.ui.View):
                 welcome_msg = (
                     f"Welcome to the Scorecard Discussion for **Cycle {self.cycle_number}**!\n\n"
                     "Below are the links to submit your reviews for the confirmed Spotlight Sets:\n\n"
-                    f"{form_output_block.replace('✅ Spotlight roster saved to Firestore!', '')}"
+                    f"{form_output_block.replace('**✅ Spotlight roster and Google Forms created successfully!**', '')}"
                 )
                 await thread.send(welcome_msg)
                 

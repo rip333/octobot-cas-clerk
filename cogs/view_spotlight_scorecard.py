@@ -174,8 +174,8 @@ class ViewSpotlightScorecard(commands.Cog):
         metadata = self.db.get_cycle_metadata()
         cycle_number = metadata.get("number", 0)
         
-        cycle_forms_data = self.db.get_cycle_forms(cycle_number)
-        forms_list = cycle_forms_data.get("forms", [])
+        cycle_forms_data = self.db.get_spotlight_roster(cycle_number)
+        forms_list = cycle_forms_data.get("spotlights", [])
         
         if not forms_list:
             await interaction.followup.send(f"No Google Forms have been created for Cycle {cycle_number} yet.")
