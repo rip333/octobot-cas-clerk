@@ -99,7 +99,7 @@ class FinalConfirmView(discord.ui.View):
             # Update state
             metadata = self.db.get_cycle_metadata()
             metadata["state"] = "reviewing"
-            self.db.save_cycle_metadata(metadata)
+            self.db.update_cycle_metadata(metadata)
             
             # Create Thread
             thread_name = f"Cycle {self.cycle_number} - Scorecards"

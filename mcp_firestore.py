@@ -1,6 +1,7 @@
 import os
 
 from google.cloud import firestore
+from google.cloud.firestore_v1.base_query import FieldFilter
 
 
 class MCPFirestore:
@@ -176,7 +177,7 @@ class MCPFirestore:
         Record the IP assignment for a specific set in the nominations collection directly.
         """
         # Batch update all matching nominations
-        query = self.db.collection('nominations').where('set_name', '==', set_name)
+        query = self.db.collection('nominations').where(filter=FieldFilter('set_name', '==', set_name))
         docs = query.stream()
         
         batch = self.db.batch()
@@ -187,7 +188,7 @@ class MCPFirestore:
             
         if count == 0:
             # Fallback for old schema
-            query2 = self.db.collection('nominations').where('nomineeName', '==', set_name)
+            query2 = self.db.collection('nominations').where(filter=FieldFilter('nomineeName', '==', set_name))
             docs2 = query2.stream()
             for doc in docs2:
                 batch.update(doc.reference, {"ip_category": ip_category})
