@@ -73,17 +73,15 @@ class ConfirmSpotlight(commands.Cog):
         view = TiebreakerView(title, description, options, num_to_select)
         embed = discord.Embed(title=title, description=description, color=discord.Color.red())
         
-        # We edit the original interaction message to prompt the tiebreaker
-        msg = await interaction.followup.send(embed=embed, view=view, wait=True)
+        msg = await interaction.followup.send(embed=embed, view=view, wait=True, ephemeral=True)
         
-        # Wait for the future
         result = await view.future
         return result
 
     @app_commands.command(name="confirm-spotlight", description="Admin: Run the spotlight logic, resolve ties, and save the final roster.")
     @app_commands.default_permissions(manage_messages=True)
     async def confirm_spotlight(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=False)
+        await interaction.response.defer(ephemeral=True)
         
         metadata = self.db.get_cycle_metadata()
         cycle_number = metadata.get("number", 0)
@@ -231,7 +229,7 @@ class ConfirmSpotlight(commands.Cog):
             cat_winners = []
             candidates = []
             for h in pool:
-                ip = ip_cache.get(h['name'].split(" — ")[0], "Other")  # Fallback
+                ip = ip_cache.get(h['name'], "Other")
                 if ip == quota_cat:
                     candidates.append(h)
                     
@@ -313,7 +311,7 @@ class ConfirmSpotlight(commands.Cog):
         embed.add_field(name="Encounters", value="\n".join(f"- {h}" for h in encounters) if encounters else "None", inline=False)
         
         view = FinalConfirmView(self.db, cycle_number, final_roster, interaction)
-        await interaction.followup.send("Please verify the roster below and confirm to save to the database:", embed=embed, view=view)
+        await interaction.followup.send("Please verify the roster below and confirm to save to the database:", embed=embed, view=view, ephemeral=True)
 
 
 async def setup(bot):

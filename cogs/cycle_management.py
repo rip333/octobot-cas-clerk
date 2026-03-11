@@ -17,7 +17,7 @@ class CycleManagement(commands.Cog):
     @app_commands.command(name="start-nominations", description="Create and monitor nominations thread for CAS cycle.")
     @app_commands.default_permissions(manage_channels=True)
     async def start_nominations(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=False)
+        await interaction.response.defer(ephemeral=True)
         
         metadata = self.db.get_cycle_metadata()
         current_cycle_number = int(metadata.get("number"))
