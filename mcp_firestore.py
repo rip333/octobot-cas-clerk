@@ -206,3 +206,33 @@ class MCPFirestore:
             assignments[data['nominee']] = data['ip_category']
         return assignments
 
+    def save_cycle_forms(self, cycle_number: int, spreadsheet_id: str, spreadsheet_url: str, forms: list) -> bool:
+        """
+        Persist the generated Google Forms and Spreadsheet info for a cycle.
+
+        Parameters
+        ----------
+        cycle_number      : int   — current cycle number
+        spreadsheet_id    : str   — Google Sheets spreadsheet id (may be empty if skipped)
+        spreadsheet_url   : str   — public URL to the spreadsheet
+        forms             : list  — list of dicts with keys: name, category, form_id, title, edit_url, response_url
+        """
+        doc_ref = self.db.collection('cycle_forms').document(str(cycle_number))
+        doc_ref.set({
+            'cycle': int(cycle_number),
+            'spreadsheet_id': spreadsheet_id,
+            'spreadsheet_url': spreadsheet_url,
+            'forms': forms,
+            'timestamp': firestore.SERVER_TIMESTAMP,
+        })
+        return True
+
+    def get_cycle_forms(self, cycle_number: int) -> dict:
+        """
+        Retrieve the form/sheet data saved for a cycle.
+        Returns the document dict, or an empty dict if not found.
+        """
+        doc_ref = self.db.collection('cycle_forms').document(str(cycle_number))
+        doc = doc_ref.get()
+        return doc.to_dict() if doc.exists else {}
+

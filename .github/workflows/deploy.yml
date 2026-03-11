@@ -94,10 +94,17 @@ jobs:
              GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
              CLOUD_FUNCTION_URL=${{ secrets.CLOUD_FUNCTION_URL }}
              GOOGLE_APPLICATION_CREDENTIALS=gen-lang-client.json
+             GOOGLE_TEMPLATE_FORM_ID=1_qWfCzc_mtgNasYkh99Dn2fP1TYYNbaaOoyor5y85EA
+             GOOGLE_DRIVE_FOLDER_ID=
+             GOOGLE_OAUTH_TOKEN_PATH=token.json
              EOF
              
              cat << 'EOF' > gen-lang-client.json
              ${{ secrets.GCP_CREDENTIALS }}
+             EOF
+
+             cat << 'EOF' > token.json
+             ${{ secrets.GOOGLE_OAUTH_TOKEN }}
              EOF
              
              sudo tee /etc/systemd/system/octobot.service > /dev/null << EOF

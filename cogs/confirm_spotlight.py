@@ -3,6 +3,7 @@ from discord.ext import commands
 from discord import app_commands
 import asyncio
 from mcp_firestore import MCPFirestore
+from google_services import GoogleServices
 
 class TiebreakerView(discord.ui.View):
     def __init__(self, title: str, description: str, options: list, num_to_select: int):
@@ -51,11 +52,57 @@ class FinalConfirmView(discord.ui.View):
 
     @discord.ui.button(label="Confirm & Save to Roster", style=discord.ButtonStyle.success)
     async def btn_confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        # Defer first — Google API calls can take several seconds
+        await interaction.response.defer(ephemeral=True)
+
         for child in self.children:
             child.disabled = True
-            
+
+        # 1. Save the roster to Firestore
         self.db.save_spotlight_roster(self.cycle_number, self.roster)
-        await interaction.response.edit_message(content="**Spotlight Sets saved to table!**", view=self)
+
+        # 2. Create Google Forms and Spreadsheet for this cycle
+        status_lines = ["**✅ Spotlight roster saved to Firestore!**", ""]
+        forms_data = []
+        spreadsheet_id = ""
+        spreadsheet_url = ""
+
+        try:
+            gs = GoogleServices()
+
+            # Clone template form and create a sheet for each set in the roster
+            status_lines.append("**Scorecard Forms & Sheets:**")
+            for entry in self.roster:
+                try:
+                    creator_name = entry.get("creatorName", "Unknown")
+                    sheet_result = gs.create_cycle_spreadsheet(entry["name"], creator_name, self.cycle_number)
+                    form_result = gs.copy_form_for_set(entry["name"], self.cycle_number)
+                    
+                    forms_data.append({
+                        "name": entry["name"],
+                        "category": entry["category"],
+                        "form_id": form_result["form_id"],
+                        "title": form_result["title"],
+                        "edit_url": form_result["edit_url"],
+                        "response_url": form_result["response_url"],
+                        "spreadsheet_id": sheet_result["spreadsheet_id"],
+                        "spreadsheet_url": sheet_result["spreadsheet_url"],
+                    })
+                    status_lines.append(
+                        f"- **{entry['name']}** ({entry['category']}):\n"
+                        f"  [Form]({form_result['response_url']}) | [Sheet]({sheet_result['spreadsheet_url']})"
+                    )
+                except Exception as form_err:
+                    status_lines.append(f"- ⚠️ **{entry['name']}**: Form/Sheet creation failed — {form_err}")
+
+            # 3. Persist form/sheet data to Firestore
+            self.db.save_cycle_forms(self.cycle_number, "", "", forms_data)
+
+        except Exception as e:
+            status_lines.append(f"\n⚠️ Google API error: {e}")
+            status_lines.append("Roster was saved to Firestore but forms were NOT created.")
+
+        await interaction.edit_original_response(content="\n".join(status_lines), view=self)
 
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.danger)
     async def btn_cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
