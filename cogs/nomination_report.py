@@ -23,12 +23,12 @@ class CapReport(commands.Cog):
         for doc in results:
             data = doc.to_dict()
             category = data.get('category', '').lower()
-            nominee = data.get('nomineeName', 'Unknown')
+            set_name = data.get('set_name', data.get('nomineeName', 'Unknown'))
             
             if category == 'hero':
-                heroes.append(nominee)
+                heroes.append(set_name)
             elif category == 'encounter':
-                encounters.append(nominee)
+                encounters.append(set_name)
         
         embed = discord.Embed(title="Nomination Report", color=discord.Color.blue())
         

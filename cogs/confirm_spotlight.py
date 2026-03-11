@@ -74,14 +74,14 @@ class FinalConfirmView(discord.ui.View):
             gs = GoogleServices()
 
             # Clone template form and create a sheet for each set in the roster
-            status_lines.append("**Scorecard Forms & Sheets:**")
+            status_lines.append("**Scorecard Forms:**")
             for entry in self.roster:
                 try:
                     creator_name = entry.get("creatorName", "Unknown")
-                    form_result = gs.copy_form_for_set(entry["name"], self.cycle_number, creator_name)
+                    form_result = gs.copy_form_for_set(entry["set_name"], self.cycle_number, creator_name)
                     
                     forms_data.append({
-                        "name": entry["name"],
+                        "set_name": entry["set_name"],
                         "category": entry["category"],
                         "form_id": form_result["form_id"],
                         "title": form_result["title"],
@@ -89,11 +89,11 @@ class FinalConfirmView(discord.ui.View):
                         "response_url": form_result["response_url"]
                     })
                     status_lines.append(
-                        f"- **{entry['name']}** ({entry['category']}):\n"
+                        f"- **{entry['set_name']}** ({entry['category']}):\n"
                         f"  [Form]({form_result['response_url']})"
                     )
                 except Exception as form_err:
-                    status_lines.append(f"- ⚠️ **{entry['name']}**: Form creation failed — {form_err}")
+                    status_lines.append(f"- ⚠️ **{entry['set_name']}**: Form creation failed — {form_err}")
 
             # 3. Persist form/sheet data to Firestore
             self.db.save_cycle_forms(self.cycle_number, "", "", forms_data)
@@ -139,20 +139,27 @@ class ConfirmSpotlight(commands.Cog):
         
         nom_map = {}
         for data in noms:
-            nominee = data.get('nomineeName', 'Unknown')
-            creator_name = data.get('creatorName', '')
-            display_name = f"{nominee} — {creator_name}" if creator_name else nominee
-            nom_map[display_name] = data
+            set_name = data.get('set_name', data.get('nomineeName', 'Unknown'))
+            nom_map[set_name] = data
             
         # Tally Raw Votes
         hero_counts = {}
         encounter_counts = {}
         
         for data in results:
-            for hero in data.get('heroes', []):
-                hero_counts[hero] = hero_counts.get(hero, 0) + 1
-            for enc in data.get('encounters', []):
-                encounter_counts[enc] = encounter_counts.get(enc, 0) + 1
+            for hero_obj in data.get('heroes', []):
+                if isinstance(hero_obj, dict):
+                    set_name = hero_obj.get('set_name', hero_obj.get('nomineeName', 'Unknown'))
+                else:
+                    set_name = hero_obj.split(' — ')[0]
+                hero_counts[set_name] = hero_counts.get(set_name, 0) + 1
+                
+            for encounter_obj in data.get('encounters', []):
+                if isinstance(encounter_obj, dict):
+                    set_name = encounter_obj.get('set_name', encounter_obj.get('nomineeName', 'Unknown'))
+                else:
+                    set_name = encounter_obj.split(' — ')[0]
+                encounter_counts[set_name] = encounter_counts.get(set_name, 0) + 1
                 
         # Group by Creator for Tiebreaking
         creator_heroes = {}
@@ -229,7 +236,7 @@ class ConfirmSpotlight(commands.Cog):
         final_roster = []
         
         def format_hero_data(name, category):
-            data = {"name": name, "category": category}
+            data = {"set_name": name, "category": category}
             nom = nom_map.get(name, {})
             if nom.get('creatorName'):
                 data['creatorName'] = nom['creatorName']
@@ -345,11 +352,11 @@ class ConfirmSpotlight(commands.Cog):
         # STEP 5: Final Confirmation
         embed = discord.Embed(title="Final Spotlight Roster Preview", color=discord.Color.green())
         
-        marvel_heroes = [h['name'] for h in final_roster if h['category'] == 'Marvel']
-        dc_heroes = [h['name'] for h in final_roster if h['category'] == 'DC']
-        other_heroes = [h['name'] for h in final_roster if h['category'] == 'Other']
-        wildcard_heroes = [h['name'] for h in final_roster if h['category'] == 'Wildcard']
-        encounters = [h['name'] for h in final_roster if h['category'] == 'Encounter']
+        marvel_heroes = [h['set_name'] for h in final_roster if h['category'] == 'Marvel']
+        dc_heroes = [h['set_name'] for h in final_roster if h['category'] == 'DC']
+        other_heroes = [h['set_name'] for h in final_roster if h['category'] == 'Other']
+        wildcard_heroes = [h['set_name'] for h in final_roster if h['category'] == 'Wildcard']
+        encounters = [h['set_name'] for h in final_roster if h['category'] == 'Encounter']
         
         embed.add_field(name="Marvel", value="\n".join(f"- {h}" for h in marvel_heroes) if marvel_heroes else "None", inline=False)
         embed.add_field(name="DC", value="\n".join(f"- {h}" for h in dc_heroes) if dc_heroes else "None", inline=False)

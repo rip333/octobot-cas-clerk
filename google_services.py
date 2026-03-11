@@ -91,7 +91,7 @@ class GoogleServices:
             edit_url     — link to edit the form (admin use)
             response_url — public response URL
         """
-        title = f"cycle {cycle_number} - {set_name} by {creator_name}"
+        title = f"Cycle {cycle_number} - {set_name} by {creator_name}"
 
         # 1. Create a blank form with the right title
         new_form = self.forms.forms().create(body={

@@ -22,7 +22,7 @@ class MCPFirestore:
             nominations.append(data)
         return nominations
 
-    def add_nomination(self, nominator_id: str, nominator_name: str, nominee_name: str, category: str, creator_name: str = "", creator_discord_id: str = "", ip_category: str = "") -> str:
+    def add_nomination(self, nominator_id: str, nominator_name: str, set_name: str, category: str, creator_name: str = "", creator_discord_id: str = "", ip_category: str = "") -> str:
         """
         Add a new nomination to the nominations collection.
         """
@@ -30,7 +30,7 @@ class MCPFirestore:
         data = {
             'nominatorId': str(nominator_id),
             'nominatorName': str(nominator_name),
-            'nomineeName': nominee_name,
+            'set_name': set_name,
             'category': category,
             'timestamp': firestore.SERVER_TIMESTAMP
         }
@@ -168,7 +168,7 @@ class MCPFirestore:
             doc_ref = self.db.collection('spotlight_roster').document()
             data = {
                 'cycle': int(cycle_number),
-                'nominee': str(hero['name']),
+                'set_name': str(hero['set_name']),
                 'category': str(hero['category']),
                 'timestamp': firestore.SERVER_TIMESTAMP
             }
@@ -180,15 +180,15 @@ class MCPFirestore:
         batch.commit()
         return True
 
-    def save_ip_assignment(self, cycle_number: int, nominee: str, ip_category: str) -> bool:
+    def save_ip_assignment(self, cycle_number: int, set_name: str, ip_category: str) -> bool:
         """
-        Record the IP assignment for a specific nominee in a cycle.
+        Record the IP assignment for a specific set in a cycle.
         """
-        doc_id = f"{cycle_number}_{nominee}".replace('/', '_')
+        doc_id = f"{cycle_number}_{set_name}".replace('/', '_')
         doc_ref = self.db.collection('ip_assignments').document(doc_id)
         doc_ref.set({
             'cycle': int(cycle_number),
-            'nominee': str(nominee),
+            'set_name': str(set_name),
             'ip_category': str(ip_category),
             'timestamp': firestore.SERVER_TIMESTAMP
         }, merge=True)
@@ -196,14 +196,15 @@ class MCPFirestore:
 
     def get_ip_assignments(self, cycle_number: int) -> dict:
         """
-        Get all IP assignments for a specific cycle. Returns a dict mapping nominee to ip_category.
+        Get all IP assignments for a specific cycle. Returns a dict mapping set_name to ip_category.
         """
         query = self.db.collection('ip_assignments').where('cycle', '==', int(cycle_number))
         results = query.stream()
         assignments = {}
         for doc in results:
             data = doc.to_dict()
-            assignments[data['nominee']] = data['ip_category']
+            set_name = data.get('set_name', data.get('nominee', 'Unknown'))
+            assignments[set_name] = data.get('ip_category', 'Other')
         return assignments
 
     def save_cycle_forms(self, cycle_number: int, spreadsheet_id: str, spreadsheet_url: str, forms: list) -> bool:

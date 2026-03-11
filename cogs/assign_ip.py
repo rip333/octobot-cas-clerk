@@ -101,19 +101,21 @@ class AssignIP(commands.Cog):
         nom_map = {}
         nom_ips = {}
         for data in noms:
-            nominee = data.get('nomineeName', 'Unknown')
-            creator_name = data.get('creatorName', '')
-            display_name = f"{nominee} — {creator_name}" if creator_name else nominee
-            nom_map[nominee] = display_name
+            set_name = data.get('set_name', data.get('nomineeName', 'Unknown'))
+            nom_map[set_name] = set_name
             # Gather LLM AI Guessed IPs
             ip_cat = data.get('ip_category')
             if ip_cat and ip_cat in ["Marvel", "DC", "Other"]:
-                nom_ips[display_name] = ip_cat
+                nom_ips[set_name] = ip_cat
             
         unique_candidates = set()
         for data in results:
-            for hero in data.get('heroes', []):
-                disp = nom_map.get(hero.split(" — ")[0], hero)
+            for hero_obj in data.get('heroes', []):
+                if isinstance(hero_obj, dict):
+                    set_name = hero_obj.get('set_name', hero_obj.get('nomineeName', 'Unknown'))
+                else:
+                    set_name = hero_obj.split(' — ')[0]
+                disp = nom_map.get(set_name, set_name)
                 # Auto cache if the LLM successfully guessed the IP
                 if disp in nom_ips:
                     if disp not in ip_cache:
@@ -121,8 +123,12 @@ class AssignIP(commands.Cog):
                 elif disp not in ip_cache:
                     unique_candidates.add(disp)
                     
-            for enc in data.get('encounters', []):
-                disp = nom_map.get(enc.split(" — ")[0], enc)
+            for encounter_obj in data.get('encounters', []):
+                if isinstance(encounter_obj, dict):
+                    set_name = encounter_obj.get('set_name', encounter_obj.get('nomineeName', 'Unknown'))
+                else:
+                    set_name = encounter_obj.split(' — ')[0]
+                disp = nom_map.get(set_name, set_name)
                 if disp in nom_ips:
                     if disp not in ip_cache:
                         self.db.save_ip_assignment(cycle_number, disp, nom_ips[disp])

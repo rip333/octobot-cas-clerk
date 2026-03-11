@@ -13,10 +13,8 @@ def get_filtered_results(db):
     
     nom_map = {}
     for data in noms:
-        nominee = data.get('nomineeName', 'Unknown')
-        creator_name = data.get('creatorName', '')
-        display_name = f"{nominee} — {creator_name}" if creator_name else nominee
-        nom_map[display_name] = data
+        set_name = data.get('set_name', data.get('nomineeName', 'Unknown'))
+        nom_map[set_name] = data
 
     hero_counts = {}
     encounter_counts = {}
@@ -24,10 +22,19 @@ def get_filtered_results(db):
     
     for data in votes:
         total_voters += 1
-        for hero in data.get('heroes', []):
-            hero_counts[hero] = hero_counts.get(hero, 0) + 1
-        for encounter in data.get('encounters', []):
-            encounter_counts[encounter] = encounter_counts.get(encounter, 0) + 1
+        for hero_obj in data.get('heroes', []):
+            if isinstance(hero_obj, dict):
+                set_name = hero_obj.get('set_name', hero_obj.get('nomineeName', 'Unknown'))
+            else:
+                set_name = hero_obj.split(' — ')[0]
+            hero_counts[set_name] = hero_counts.get(set_name, 0) + 1
+            
+        for encounter_obj in data.get('encounters', []):
+            if isinstance(encounter_obj, dict):
+                set_name = encounter_obj.get('set_name', encounter_obj.get('nomineeName', 'Unknown'))
+            else:
+                set_name = encounter_obj.split(' — ')[0]
+            encounter_counts[set_name] = encounter_counts.get(set_name, 0) + 1
             
     sorted_heroes = sorted(hero_counts.items(), key=lambda x: (-x[1], x[0]))
     sorted_encounters = sorted(encounter_counts.items(), key=lambda x: (-x[1], x[0]))
@@ -140,10 +147,25 @@ class VotingView(discord.ui.View):
             await interaction.followup.send("❌ **Error:** Please make at least one selection before submitting.", ephemeral=True)
             return
 
+        # Build objects from selected set_names
+        noms = self.db.get_nominations()
+        nom_map = {}
+        for data in noms:
+            set_name = data.get('set_name', data.get('nomineeName', 'Unknown'))
+            nom_map[set_name] = {
+                "set_name": set_name,
+                "creatorName": data.get('creatorName', 'Unknown'),
+                "category": data.get('category', 'Unknown'),
+                "ip_category": data.get('ip_category', 'Other')
+            }
+
+        heroes_objs = [nom_map.get(sn, {"set_name": sn}) for sn in selected_heroes]
+        encounters_objs = [nom_map.get(sn, {"set_name": sn}) for sn in selected_encounters]
+
         # Record to Firestore
         user_id = str(interaction.user.id)
         user_name = interaction.user.display_name
-        self.db.record_user_vote(user_id, user_name, selected_heroes, selected_encounters)
+        self.db.record_user_vote(user_id, user_name, heroes_objs, encounters_objs)
         
         content = f"**✅ votes_submitted**"
         await interaction.response.edit_message(content=content, view=None)
@@ -175,10 +197,10 @@ class Voting(commands.Cog):
         
         for data in results:
             category = data.get('category', '').lower()
-            nominee = data.get('nomineeName', 'Unknown')
+            set_name = data.get('set_name', data.get('nomineeName', 'Unknown'))
             creator_name = data.get('creatorName', '')
             
-            display_name = f"{nominee} — {creator_name}" if creator_name else nominee
+            display_name = f"{set_name} — {creator_name}" if creator_name else set_name
             
             if category == 'hero':
                 heroes.add(display_name)
@@ -220,26 +242,26 @@ class Voting(commands.Cog):
         
         for data in results:
             category = data.get('category', '').lower()
-            nominee = data.get('nomineeName', 'Unknown')
+            set_name = data.get('set_name', data.get('nomineeName', 'Unknown'))
             creator_name = data.get('creatorName', '')
             
-            display_name = f"{nominee} — {creator_name}" if creator_name else nominee
+            display_name = f"{set_name} — {creator_name}" if creator_name else set_name
             
             if category == 'hero':
-                heroes.add(display_name)
+                heroes.add((set_name, display_name))
             elif category == 'encounter':
-                encounters.add(display_name)
+                encounters.add((set_name, display_name))
                 
         if not heroes and not encounters:
             await interaction.followup.send("There are no active nominations to vote on.", ephemeral=True)
             return
 
-        # Sort alphabetically
-        heroes = sorted(list(heroes))
-        encounters = sorted(list(encounters))
+        # Sort alphabetically by set_name
+        heroes = sorted(list(heroes), key=lambda x: x[0])
+        encounters = sorted(list(encounters), key=lambda x: x[0])
         
-        hero_options = [discord.SelectOption(label=h[:100], value=h[:100]) for h in heroes]
-        encounter_options = [discord.SelectOption(label=e[:100], value=e[:100]) for e in encounters]
+        hero_options = [discord.SelectOption(label=h[1][:100], value=h[0][:100]) for h in heroes]
+        encounter_options = [discord.SelectOption(label=e[1][:100], value=e[0][:100]) for e in encounters]
         
         view = VotingView(self.db, hero_options, encounter_options)
         
@@ -260,10 +282,10 @@ class Voting(commands.Cog):
         
         nom_map = {}
         for data in noms:
-            nominee = data.get('nomineeName', 'Unknown')
+            set_name = data.get('set_name', data.get('nomineeName', 'Unknown'))
             creator_name = data.get('creatorName', '')
-            display_name = f"{nominee} — {creator_name}" if creator_name else nominee
-            nom_map[nominee] = display_name
+            display_name = f"{set_name} — {creator_name}" if creator_name else set_name
+            nom_map[set_name] = display_name
             
         hero_counts = {}
         encounter_counts = {}
@@ -271,12 +293,20 @@ class Voting(commands.Cog):
         
         for data in results:
             total_voters += 1
-            for hero in data.get('heroes', []):
-                # get back the display name if possible
-                disp = nom_map.get(hero.split(" — ")[0], hero)
+            for hero_obj in data.get('heroes', []):
+                if isinstance(hero_obj, dict):
+                    set_name = hero_obj.get('set_name', hero_obj.get('nomineeName', 'Unknown'))
+                else:
+                    set_name = hero_obj.split(' — ')[0]
+                disp = nom_map.get(set_name, set_name)
                 hero_counts[disp] = hero_counts.get(disp, 0) + 1
-            for encounter in data.get('encounters', []):
-                disp = nom_map.get(encounter.split(" — ")[0], encounter)
+                
+            for encounter_obj in data.get('encounters', []):
+                if isinstance(encounter_obj, dict):
+                    set_name = encounter_obj.get('set_name', encounter_obj.get('nomineeName', 'Unknown'))
+                else:
+                    set_name = encounter_obj.split(' — ')[0]
+                disp = nom_map.get(set_name, set_name)
                 encounter_counts[disp] = encounter_counts.get(disp, 0) + 1
                 
         if total_voters == 0:
