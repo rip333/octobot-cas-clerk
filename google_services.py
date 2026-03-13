@@ -9,6 +9,7 @@ SCOPES = [
     "https://www.googleapis.com/auth/forms.body",
     "https://www.googleapis.com/auth/forms.responses.readonly",
     "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/script.projects",
 ]
 
 SCRIPT_ID = 'AKfycbwGRDRDItIC54juHuZ5fqFKyYLVAcozaf7B_GHbwhsjnDqBT8qVWY7IidM-xU60sdr7'
@@ -16,13 +17,11 @@ SCRIPT_ID = 'AKfycbwGRDRDItIC54juHuZ5fqFKyYLVAcozaf7B_GHbwhsjnDqBT8qVWY7IidM-xU6
 def _build_user_credentials() -> Credentials:
     """
     Load and auto-refresh OAuth2 user credentials from token.json.
-    The token.json file is created once by running scripts/authorize_google_oauth.py.
     """
     token_path = os.environ.get("GOOGLE_OAUTH_TOKEN_PATH", "token.json")
     if not os.path.exists(token_path):
         raise FileNotFoundError(
             f"OAuth2 token file not found at '{token_path}'. "
-            "Run scripts/authorize_google_oauth.py once to generate it."
         )
     creds = Credentials.from_authorized_user_file(token_path, SCOPES)
 
@@ -43,6 +42,7 @@ class GoogleServices:
         creds = _build_user_credentials()
         self.drive = build("drive", "v3", credentials=creds)
         self.forms = build("forms", "v1", credentials=creds)
+        self.script = build("script", "v1", credentials=creds)
 
     def _get_template_items(self) -> list:
         """Read all items (questions/sections) from the template form."""

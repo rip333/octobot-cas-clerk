@@ -86,7 +86,7 @@ class FinalConfirmView(discord.ui.View):
         )
 
         # 1. Create Google Forms for each set in the roster
-        status_lines = ["**✅ Spotlight roster and Google Forms created successfully!**", ""]
+        status_lines = ["**✅ Spotlight roster and Google Forms created successfully!**\n", ""]
 
         try:
             gs = GoogleServices()
@@ -120,11 +120,6 @@ class FinalConfirmView(discord.ui.View):
         await interaction.edit_original_response(content=form_output_block, view=self)
 
         try:
-            # Update state
-            metadata = self.db.get_cycle_metadata()
-            metadata["state"] = "reviewing"
-            self.db.update_cycle_metadata(metadata)
-            
             # Create Thread
             thread_name = f"Cycle {self.cycle_number} - Scorecards"
             channel = interaction.channel
@@ -150,9 +145,14 @@ class FinalConfirmView(discord.ui.View):
                 )
                 roster_embed = build_roster_embed(self.roster, f"Cycle {self.cycle_number} Scorecards")
                 await thread.send(welcome_msg, embed=roster_embed)
+
+                # 5. Update state to 'results' as the final action
+                metadata = self.db.get_cycle_metadata()
+                metadata["state"] = "results"
+                self.db.update_cycle_metadata(metadata)
                 
         except Exception as e:
-            await interaction.followup.send(f"⚠️ Error changing cycle to `reviewing` or creating thread: {e}", ephemeral=True)
+            await interaction.followup.send(f"⚠️ Error changing cycle to `results` or creating thread: {e}", ephemeral=True)
 
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.danger)
     async def btn_cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
