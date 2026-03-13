@@ -11,6 +11,7 @@ SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
 ]
 
+SCRIPT_ID = 'AKfycbwGRDRDItIC54juHuZ5fqFKyYLVAcozaf7B_GHbwhsjnDqBT8qVWY7IidM-xU60sdr7'
 
 def _build_user_credentials() -> Credentials:
     """
@@ -104,6 +105,22 @@ class GoogleServices:
         ).execute()
         
         return folder.get('id')
+    
+    def _apply_form_settings_via_script(self, form_id: str):
+        """Calls the Apps Script to update form settings/logic."""
+        request_body = {
+            "function": "updateFormSettings",
+            "parameters": [form_id],
+            "devMode": True
+        }
+        try:
+            response = self.script.scripts().run(scriptId=SCRIPT_ID, body=request_body).execute()
+            if 'error' in response:
+                print(f"Apps Script Error for form {form_id}: {response['error']['details'][0]['errorMessage']}")
+            else:
+                print(f"Successfully applied settings to form {form_id}")
+        except Exception as e:
+            print(f"Failed to trigger Apps Script: {e}")
 
     def copy_form_for_set(self, set_name: str, cycle_number: int, creator_name: str) -> dict:
         """
@@ -158,6 +175,8 @@ class GoogleServices:
             ).execute()
         except Exception as e:
             print(f"Warning: Failed to move form {form_id} to folder: {e}")
+
+        self._apply_form_settings_via_script(form_id)
 
         return {
             "form_id": form_id,
