@@ -22,6 +22,10 @@ class MCPFirestore:
         archive_data["active"] = False
         archive_ref.set(archive_data)
 
+        # Clean up cycle data
+        self.clear_nominations()
+        self.clear_votes()
+
         new_current_data = {
             "number": current_num + 1,
             "state": "planning",
