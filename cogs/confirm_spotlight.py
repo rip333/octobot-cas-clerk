@@ -91,7 +91,7 @@ class FinalConfirmView(discord.ui.View):
         try:
             gs = GoogleServices()
 
-            status_lines.append("**Scorecard Forms:**")
+            status_lines.append("**Scorecard Forms:**\n")
             for entry in self.roster:
                 try:
                     creator_name = entry.get("creatorName", "Unknown")
@@ -113,6 +113,9 @@ class FinalConfirmView(discord.ui.View):
             self.db.save_spotlight_roster(self.cycle_number, self.roster)
 
         except Exception as e:
+            import traceback
+            print(f"!!! Error in button callback: {e}")
+            traceback.print_exc() 
             status_lines.append(f"\n⚠️ Error creating forms or saving roster: {e}")
 
         # 4. Generate Feedback Thread + Update Status
