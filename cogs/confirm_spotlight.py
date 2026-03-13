@@ -135,9 +135,17 @@ class FinalConfirmView(discord.ui.View):
                     auto_archive_duration=10080
                 )
                 
+                # Calculate end date: 6 weeks from now, at midnight
+                from datetime import datetime, timedelta
+                end_date = datetime.now() + timedelta(weeks=6)
+                # Set to midnight (00:00:00) of that future day
+                end_date = end_date.replace(hour=0, minute=0, second=0, microsecond=0)
+                end_ts = int(end_date.timestamp())
+
                 # Send welcome message
                 welcome_msg = (
                     f"Congratulations on the confirmed Spotlight Sets for **Cycle {self.cycle_number}**!\n\n"
+                    f"The review cycle ends on **<t:{end_ts}:F>** (<t:{end_ts}:R>).\n\n"
                     "Below are the links to submit your reviews for the confirmed Spotlight Sets:"
                 )
                 roster_embed = build_roster_embed(self.roster, f"Cycle {self.cycle_number} Scorecards")
