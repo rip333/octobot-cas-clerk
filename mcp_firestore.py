@@ -8,6 +8,40 @@ class MCPFirestore:
     def __init__(self):
         self.db = firestore.Client(database="octobot-cas-db")
 
+    def end_cycle(self) -> bool:
+        """
+        Archive the current cycle as a snapshot and reset 'current' for the next cycle.
+        """
+        current_metadata = self.get_cycle_metadata()
+        current_num = current_metadata.get("number", 0)
+
+        archive_ref = self.db.collection('cycle_metadata').document(f"cycle_{current_num}")
+        
+        archive_data = current_metadata.copy()
+        archive_data["state"] = "complete"
+        archive_data["active"] = False
+        archive_ref.set(archive_data)
+
+        new_current_data = {
+            "number": current_num + 1,
+            "state": "planning",
+            "active": False,
+            "nomination_thread_id": 0
+        }
+        
+        return self.update_cycle_metadata(new_current_data)
+
+    def begin_cycle(self, thread_id: int) -> bool:
+        """
+        Transition the current cycle from 'planning' to 'nominations'.
+        Sets active to True, state to 'nominations', and stores the thread ID.
+        """
+        metadata = self.get_cycle_metadata()
+        metadata["active"] = True
+        metadata["state"] = "nominations"
+        metadata["nomination_thread_id"] = thread_id
+        return self.update_cycle_metadata(metadata)
+
     def get_nominations(self) -> list:
         """
         Read all nominations from the nominations collection.
@@ -84,7 +118,7 @@ class MCPFirestore:
             return doc.to_dict()
         else:
             default_data = {
-                "number": 11,
+                "number": 100,
                 "active": True,
                 "nomination_thread_id": 0,
                 "state": "off"

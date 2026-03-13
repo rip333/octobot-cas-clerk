@@ -16,6 +16,12 @@ class CycleManagement(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         
         metadata = self.db.get_cycle_metadata()
+        current_state = metadata.get("state", "off")
+        
+        if current_state != "planning":
+            await interaction.followup.send("❌ **Invalid state.** This command can only be run when the cycle is in the `planning` state.", ephemeral=True)
+            return
+        
         current_cycle_number = int(metadata.get("number"))
         
         deleted_count = self.db.clear_nominations()
@@ -50,14 +56,7 @@ class CycleManagement(commands.Cog):
         
         await thread.send(intro_text)
         
-        new_metadata = {
-            "number": current_cycle_number,
-            "active": True,
-            "nomination_thread_id": thread.id,
-            "state": "nominations"
-        }
-        self.db.update_cycle_metadata(new_metadata)
-        
+        self.db.begin_cycle(thread.id)
         self.bot.nomination_thread_id = thread.id
         self.bot.nomination_state = "nominations"
         

@@ -180,8 +180,12 @@ class Voting(commands.Cog):
     async def start_voting(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=False)
         
-        # Update metadata state to voting
         metadata = self.db.get_cycle_metadata()
+        if metadata.get("state") != "nominations":
+            await interaction.followup.send("❌ **Invalid state.** This command can only be run during the `nominations` phase.", ephemeral=True)
+            return
+        
+        # Update metadata state to voting
         metadata["state"] = "voting"
         self.db.update_cycle_metadata(metadata)
         self.bot.nomination_state = "voting"
@@ -230,8 +234,9 @@ class Voting(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         
         # Ensure voting is actually open
-        if getattr(self.bot, 'nomination_state', 'off') != "voting":
-            await interaction.followup.send("Voting for the current cycle is not open right now.", ephemeral=True)
+        metadata = self.db.get_cycle_metadata()
+        if metadata.get("state") != "voting":
+            await interaction.followup.send("❌ **Invalid state.** Voting is not open right now.", ephemeral=True)
             return
             
         # Fetch current nominations
@@ -276,6 +281,11 @@ class Voting(commands.Cog):
     @app_commands.default_permissions(manage_messages=True)
     async def tally_votes(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
+        
+        metadata = self.db.get_cycle_metadata()
+        if metadata.get("state") != "voting":
+            await interaction.followup.send("❌ **Invalid state.** This command can only be run during the `voting` phase.", ephemeral=True)
+            return
         
         results = self.db.get_all_votes()
         noms = self.db.get_nominations()

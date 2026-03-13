@@ -104,10 +104,10 @@ class FinalConfirmView(discord.ui.View):
                     
                     status_lines.append(
                         f"- **{entry['set_name']}** ({entry['category']}):\n"
-                        f"  [Form]({form_result['response_url']})"
+                        f"  [Form]({form_result['response_url']})\n"
                     )
                 except Exception as form_err:
-                    status_lines.append(f"- ⚠️ **{entry['set_name']}**: Form creation failed — {form_err}")
+                    status_lines.append(f"- ⚠️ **{entry['set_name']}**: Form creation failed — {form_err}\n")
 
             # 2. Save the final roster containing all form data into the single Firestore source of truth.
             self.db.save_spotlight_roster(self.cycle_number, self.roster)
@@ -133,14 +133,11 @@ class FinalConfirmView(discord.ui.View):
                     auto_archive_duration=10080
                 )
                 
-                # Calculate end date: 6 weeks from now, at midnight
                 from datetime import datetime, timedelta
                 end_date = datetime.now() + timedelta(weeks=6)
-                # Set to midnight (00:00:00) of that future day
                 end_date = end_date.replace(hour=0, minute=0, second=0, microsecond=0)
                 end_ts = int(end_date.timestamp())
 
-                # Send welcome message
                 welcome_msg = (
                     f"Congratulations on the confirmed Spotlight Sets for **Cycle {self.cycle_number}**!\n\n"
                     f"The review cycle ends on **<t:{end_ts}:F>** (<t:{end_ts}:R>).\n\n"
@@ -149,13 +146,10 @@ class FinalConfirmView(discord.ui.View):
                 roster_embed = build_roster_embed(self.roster, f"Cycle {self.cycle_number} Scorecards")
                 await thread.send(welcome_msg, embed=roster_embed)
 
-                # 5. Update state to 'results' as the final action
-                metadata = self.db.get_cycle_metadata()
-                metadata["state"] = "results"
-                self.db.update_cycle_metadata(metadata)
+                self.db.end_cycle()
                 
         except Exception as e:
-            await interaction.followup.send(f"⚠️ Error changing cycle to `results` or creating thread: {e}", ephemeral=True)
+            await interaction.followup.send(f"⚠️ Error: {e}", ephemeral=True)
 
     @discord.ui.button(label="Cancel", style=discord.ButtonStyle.danger)
     async def btn_cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -184,6 +178,10 @@ class ConfirmSpotlight(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         
         metadata = self.db.get_cycle_metadata()
+        if metadata.get("state") != "voting":
+            await interaction.followup.send("❌ **Invalid state.** This command can only be run during the `voting` phase.", ephemeral=True)
+            return
+        
         cycle_number = metadata.get("number", 0)
         
         results = self.db.get_all_votes()

@@ -1,27 +1,30 @@
 import discord
 from discord import app_commands
 from discord.ext import commands
-from google.cloud import firestore
+from mcp_firestore import MCPFirestore
 
 
 class CapReport(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
-        self.db = firestore.Client(database="octobot-cas-db")
+        self.db = MCPFirestore()
 
     @app_commands.command(name="nomination-report", description="Generate a Nomination Report")
     @app_commands.default_permissions(manage_messages=True)
     async def nomination_report(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
         
-        query = self.db.collection('nominations').order_by('timestamp', direction=firestore.Query.DESCENDING)
-        results = query.stream()
+        metadata = self.db.get_cycle_metadata()
+        if metadata.get("state") != "nominations":
+            await interaction.followup.send("❌ **Invalid state.** This command can only be run during the `nominations` phase.", ephemeral=True)
+            return
+        
+        noms = self.db.get_nominations()
         
         heroes = []
         encounters = []
         
-        for doc in results:
-            data = doc.to_dict()
+        for data in noms:
             category = data.get('category', '').lower()
             set_name = data.get('set_name', data.get('nomineeName', 'Unknown'))
             

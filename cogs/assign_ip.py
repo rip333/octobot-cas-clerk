@@ -89,6 +89,10 @@ class AssignIP(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         
         metadata = self.db.get_cycle_metadata()
+        if metadata.get("state") != "voting":
+            await interaction.followup.send("❌ **Invalid state.** This command can only be run during the `voting` phase.", ephemeral=True)
+            return
+        
         cycle_number = metadata.get("number", 0)
         
         # Get all voted candidates
