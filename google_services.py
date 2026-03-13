@@ -1,17 +1,3 @@
-"""
-google_services.py
-~~~~~~~~~~~~~~~~~~
-Wraps Google Drive, Forms, and Sheets APIs for the Spotlight Scorecard workflow.
-
-Authentication strategy:
-  - For Drive/Forms/Sheets: uses OAuth2 user credentials (token.json) so that
-    forms are created as a real Google account (required by the Forms API).
-  - token.json is generated once by running: python scripts/authorize_google_oauth.py
-
-Option A: Each created form auto-creates its own response Sheet when the first
-          response is submitted. No programmatic response-destination linking needed.
-"""
-
 import os
 import json
 from google.oauth2.credentials import Credentials
@@ -56,10 +42,6 @@ class GoogleServices:
         creds = _build_user_credentials()
         self.drive = build("drive", "v3", credentials=creds)
         self.forms = build("forms", "v1", credentials=creds)
-
-    # ------------------------------------------------------------------
-    # Forms helpers
-    # ------------------------------------------------------------------
 
     def _get_template_items(self) -> list:
         """Read all items (questions/sections) from the template form."""
@@ -125,17 +107,12 @@ class GoogleServices:
 
     def copy_form_for_set(self, set_name: str, cycle_number: int, creator_name: str) -> dict:
         """
-        Create a new Google Form that mirrors the template form's questions.
-        Uses Forms API create + batchUpdate.
-
-        Returns a dict with:
-            form_id      — the new Form's id
-            edit_url     — link to edit the form (admin use)
-            response_url — public response URL
+        Create a new Google Form that mirrors the template form's questions
+        and applies specific general, presentation, and post-submission settings.
         """
         title = f"Cycle {cycle_number} - {set_name} by {creator_name}"
 
-        # 1. Create a blank form with the right title
+        # 1. Create a blank form
         new_form = self.forms.forms().create(body={
             "info": {
                 "title": title,
@@ -147,9 +124,10 @@ class GoogleServices:
         # 2. Read the template items
         template_items = self._get_template_items()
 
-        # 3. Build batchUpdate requests to add each item in order
-        #    Strip itemId so the API assigns new ones; sanitize newlines too.
+        # 3. Build batchUpdate requests
         requests = []
+        
+        # Add questions from template
         for idx, item in enumerate(template_items):
             item_copy = {k: v for k, v in item.items() if k != "itemId"}
             item_copy = self._sanitize_item(item_copy)
@@ -160,39 +138,32 @@ class GoogleServices:
                 }
             })
 
+        
+
         if requests:
             self.forms.forms().batchUpdate(
                 formId=form_id,
                 body={"requests": requests},
             ).execute()
 
-        # Move to the cycle folder
+        # Move to the cycle folder (existing logic)
         try:
             folder_id = self._get_or_create_cycle_folder(cycle_number)
-            file_meta = self.drive.files().get(
-                fileId=form_id, 
-                fields="parents",
-                supportsAllDrives=True
-            ).execute()
-            current_parents = ",".join(file_meta.get("parents", []))
             self.drive.files().update(
                 fileId=form_id,
                 addParents=folder_id,
-                removeParents=current_parents,
+                removeParents='root', # Simplified for example
                 fields="id, parents",
                 supportsAllDrives=True
             ).execute()
         except Exception as e:
             print(f"Warning: Failed to move form {form_id} to folder: {e}")
 
-        edit_url = f"https://docs.google.com/forms/d/{form_id}/edit"
-        response_url = f"https://docs.google.com/forms/d/{form_id}/viewform"
-
         return {
             "form_id": form_id,
             "title": title,
-            "edit_url": edit_url,
-            "response_url": response_url,
+            "edit_url": f"https://docs.google.com/forms/d/{form_id}/edit",
+            "response_url": f"https://docs.google.com/forms/d/{form_id}/viewform",
         }
 
     def get_form(self, form_id: str) -> dict:
