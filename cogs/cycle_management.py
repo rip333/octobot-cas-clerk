@@ -35,9 +35,9 @@ class CycleManagement(commands.Cog):
             f"Welcome to Cycle {current_cycle_number}! "
             f"This thread will be used for nominations and voting for Cycle {current_cycle_number}!\n\n"
             "**Rules**\n"
-            "\u2022 First, we will have nominations. You may nominate 2 Hero sets and 1 Encounter set. "
+            "First, we will have nominations. You may nominate 2 Hero sets and 1 Encounter (villain or leader) set. "
             "Please include \"hero\" or \"encounter\" in your nomination to specify which type of set you are nominating."
-            "\u2022 After nominations close (in about a week), we will close nominations and begin voting."
+            "After nominations close (in about a week), we will close nominations and begin voting."
         )
         
         channel = interaction.channel
