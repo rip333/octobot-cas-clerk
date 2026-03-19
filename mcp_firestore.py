@@ -247,3 +247,30 @@ class MCPFirestore:
         doc = doc_ref.get()
         return doc.to_dict() if doc.exists else {}
 
+    def get_ineligible_creators(self, cycle_number: int) -> tuple[list, list]:
+        """
+        Retrieves the creators who had sealed content in the previous cycle.
+        Returns a tuple of two lists: (hero_creators, encounter_creators).
+        """
+        previous_cycle = cycle_number - 1
+        roster_data = self.get_spotlight_roster(previous_cycle)
+        spotlights = roster_data.get('spotlights', [])
+        
+        hero_creators = set()
+        encounter_creators = set()
+        
+        hero_categories = ['Marvel', 'DC', 'Other', 'Wildcard']
+        
+        for item in spotlights:
+            creator_name = item.get('creatorName')
+            if not creator_name or creator_name == 'Unknown':
+                continue
+                
+            category = item.get('category')
+            if category in hero_categories:
+                hero_creators.add(creator_name)
+            elif category == 'Encounter':
+                encounter_creators.add(creator_name)
+                
+        return list(hero_creators), list(encounter_creators)
+

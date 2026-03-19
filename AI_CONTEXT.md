@@ -1,38 +1,47 @@
-# AI Context for Octobot CAS Clerk
+# AI Context: Octobot CAS Clerk
 
 ## Project Overview
-Octobot CAS Clerk is an AI-driven Discord bot and webhook listener for a Marvel Champions LCG Discord server. It serves as a "Silent Secretary" that processes natural language messages, determines the user's intent regarding homebrew content nominations, and executes actions against a Google Cloud Firestore backend using the Model Context Protocol (MCP).
+Octobot CAS Clerk is an AI-driven "Silent Secretary" for a Marvel Champions LCG homebrew community. It manages the lifecycle of custom content approval (nominations and voting) using natural language processing (NLP) to parse user messages and a structured interactive UI for administrative tasks.
 
-## Architecture & Core Technologies
+## Core Architecture
 - **Language**: Python 3.9+
-- **Discord Integration**: `discord.py` (Bot client, rate limiting, thread watching, and slash commands)
-- **AI Intelligence**: `google-genai` (using Gemini Flash Latest) to extract intent from natural language and generate cycle intros.
-- **Backend/Database**: Google Cloud Firestore. Uses a `cycle_metadata` document to persist state:
-    - `number`: Current cycle number.
-    - `nomination_thread_id`: The ID of the active Discord thread. (Syncs instantly to bot on creation)
-    - `state`: Current phase of the cycle (`"nominations"`, `"voting"`, or `"off"`).
+- **Discord Integration**: `discord.py` using Slash Commands (Cogs) and persistent views.
+- **AI Engine**: `google-genai` (Gemini Flash) for intent extraction and IP category guessing (Marvel, DC, or Other).
+- **Backend**: Google Cloud Firestore, accessed via the `MCPFirestore` toolkit.
+- **Model Context Protocol (MCP)**: The `GeminiAgent` uses Firestore methods as tools to perform actions like adding nominations or logging errors.
 
-## Directory Structure
-- `main.py`: HTTP Cloud Function entry point for webhook payloads.
-- `discord_bot.py`: The async Discord bot client. Listens to the active thread, but only processes messages via Gemini if `state == "nominations"`.
-- `gemini_agent.py`: Orchestrates the `google-genai` client and Firestore MCP tools.
-- `mcp_firestore.py`: toolkit for Firestore interactions.
-- `cogs/nomination_report.py`: Slash command for nomination summaries.
-- `cogs/cycle_management.py`: Manages transitions into the `"nominations"` state.
-- `cogs/voting.py`: Manages transitions into the `"voting"` state and provides the interactive voting UI.
-- `set_state_off.py`: Utility script to manually set `state` to `"off"`.
+## Cycle State Machine
+The bot's behavior is strictly gated by the `state` field in the `cycle_metadata/current` Firestore document:
 
-## Core Directives for the Agent
-When modifying this codebase, keep the following architectural constraints in mind:
-1. **Silent Selection Phase**: While adding/removing nominations is silent via the LLM, the **Voting Phase** uses interactive Discord components (Select Menus) spawned ephemerally via `/vote`.
-2. **State-Gated Processing**: The bot's on-message handler is gated. It MUST check that the current message is in the correct thread AND that the state is `"nominations"` before hitting the Gemini API.
-3. **Display Name Tracking**: Both the `add_nomination` and `record_user_vote` MCP tools require the user's Discord Display Name (`nominatorName`, `userName`) to be stored alongside their numeric ID for auditing.
-4. **Intent Extraction over Commands**: Users speak naturally for nominations; the LLM handles extraction. Voting is performed via explicit UI interactions.
-4. **Hard Logic vs. Soft Logic**: 
-    - **Soft Logic**: AI handles ambiguity (Hero vs. Villain).
-    - **Hard Logic**: Firestore tools handle deduplication and structured errors.
+- **`planning`**: The initial idle state. Only the `/start-nominations` command is valid.
+- **`nominations`**:
+    - The bot monitors a specific thread (`nomination_thread_id`).
+    - `on_message` payloads are sent to Gemini for NLP extraction.
+    - Gemini attempts to identify the nominee, category (Hero/Encounter), creator, and IP category.
+- **`voting`**:
+    - Admins trigger this via `/start-voting`.
+    - Users cast ephemeral ballots via `/vote` (Max 10 Heroes, 2 Encounters).
+    - Admins perform IP cleanup (`/assign-ip`) and final roster generation (`/confirm-spotlight`).
+- **`off` / `complete`**: The cycle ends, data is archived, and the system resets to `planning`.
 
-## Key Environment Variables
-- `DISCORD_TOKEN`: Discord Bot Token.
-- `GEMINI_API_KEY`: Google Gemini API Key.
-- `GOOGLE_APPLICATION_CREDENTIALS`: Path to the service account JSON.
+## Spotlight Selection Logic
+The `/confirm-spotlight` command implements "Hard Logic" to enforce community quotas:
+
+- **Quotas**: Automatically selects 2 Marvel, 2 DC, 2 Other, and 2 Wildcard sets based on vote counts.
+- **Creator Limit**: Only one set per creator can be included in the final roster.
+- **Tiebreaking**: If multiple sets are tied at the threshold for a quota or creator slot, the bot spawns an interactive `TiebreakerView` for the admin to resolve the conflict manually.
+
+## Key Files & Responsibilities
+- **`discord_bot.py`**: Entry point. Manages state-gating and rate-limiting for the `on_message` listener.
+- **`gemini_agent.py`**: Contains the system instructions for the LLM. It defines how Gemini should format names and guess IP categories.
+- **`mcp_firestore.py`**: The "Source of Truth" for all database interactions, including cycle resets and vote tallies.
+- **`cogs/`**:
+    - **`voting.py`**: Manages the interactive voting phase and tallying.
+    - **`assign_ip.py`**: Provides a "Back" button UI for admins to manually label IP categories if AI guessing fails.
+    - **`confirm_spotlight.py`**: Executes the complex selection algorithm and creates Google Forms for the winners.
+
+## Critical Constraints for AI Development
+- **State-Gating**: Never process messages for nominations unless `state == "nominations"`.
+- **Ephemeral Views**: All admin commands and user voting interfaces must be ephemeral to maintain privacy in public threads.
+- **Audit Trails**: Always store `nominatorName` or `userName` alongside IDs when using `add_nomination` or `record_user_vote`.
+- **IP Guessing**: Gemini should use its internal knowledge to pre-label IP categories as "Marvel", "DC", or "Other" during the nomination phase to reduce admin workload later.

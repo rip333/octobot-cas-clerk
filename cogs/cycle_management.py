@@ -24,6 +24,18 @@ class CycleManagement(commands.Cog):
         
         current_cycle_number = int(metadata.get("number"))
         
+        hero_creators, encounter_creators = self.db.get_ineligible_creators(current_cycle_number)
+        
+        ineligible_text = []
+        if hero_creators:
+            ineligible_text.append(f"**Heroes**: {', '.join(sorted(hero_creators))}")
+        if encounter_creators:
+            ineligible_text.append(f"**Encounters**: {', '.join(sorted(encounter_creators))}")
+            
+        ineligible_str = "None"
+        if ineligible_text:
+            ineligible_str = " | ".join(ineligible_text)
+        
         deleted_count = self.db.clear_nominations()
         print(f"Deleted {deleted_count} nominations from table.")
         
@@ -35,9 +47,11 @@ class CycleManagement(commands.Cog):
             f"Welcome to Cycle {current_cycle_number}! "
             f"This thread will be used for nominations and voting for Cycle {current_cycle_number}!\n\n"
             "**Rules**\n"
-            "First, we will have nominations. You may nominate 2 Hero sets and 1 Encounter (villain or leader) set. "
-            "Please include \"hero\" or \"encounter\" in your nomination to specify which type of set you are nominating."
-            "After nominations close (in about a week), we will close nominations and begin voting."
+            "NOMINATIONS:\n\nYou may nominate 2 Hero sets and 1 Encounter (villain or leader) set.\n\n"
+            "Please include \"hero\" or \"encounter\" in your nomination to specify which type of set you are nominating.\n\n"
+            "You may not nominate yourself.\n\n"
+            f"The following creators are ineligible for nomination: {ineligible_str}.\n\n"
+            "After nominations close (in about a week), we will close nominations and begin voting.\n\n"
         )
         
         channel = interaction.channel
