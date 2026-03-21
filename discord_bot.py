@@ -122,15 +122,56 @@ async def on_message(message):
 
     print(f"Processing message from {message.author}: {message.content}")
     
+    # Gather thread context: first post + recent history + referenced message
+    thread_context = {}
+    try:
+        channel = message.channel
+
+        # 1. First post of the thread (contains the rules)
+        # Thread history is ordered oldest-first; grab the very first message.
+        first_messages = [m async for m in channel.history(limit=1, oldest_first=True)]
+        if first_messages and first_messages[0].id != message.id:
+            fm = first_messages[0]
+            thread_context["first_post"] = {
+                "author": fm.author.name,
+                "content": fm.content[:2000]  # cap just in case
+            }
+
+        # 2. Recent thread history (up to 10 messages before this one, compressed)
+        recent = []
+        async for m in channel.history(limit=12, before=message):
+            if m.id == message.id:
+                continue
+            recent.append({"author": m.author.name, "content": m.content[:500]})
+            if len(recent) >= 10:
+                break
+        # history() returns newest-first, so reverse to chronological order
+        thread_context["recent_messages"] = list(reversed(recent))
+
+        # 3. The specific message being replied to, if any
+        if message.reference and message.reference.message_id:
+            try:
+                ref_msg = await channel.fetch_message(message.reference.message_id)
+                thread_context["replied_to"] = {
+                    "author": ref_msg.author.name,
+                    "content": ref_msg.content[:1000]
+                }
+            except Exception:
+                pass  # If we can't fetch it, just skip
+
+    except Exception as ctx_err:
+        print(f"Could not fetch thread context: {ctx_err}")
+
     # Run the Gemini Agent process in an executor so we don't block the async event loop
     try:
         loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(
-            None, 
-            agent.process_message, 
-            message.content, 
-            str(message.author.id), 
-            message.author.name
+            None,
+            agent.process_message,
+            message.content,
+            str(message.author.id),
+            message.author.name,
+            thread_context
         )
         print(f"Gemini Outcome: {result.get('gemini_response')}")
         

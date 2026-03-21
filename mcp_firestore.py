@@ -71,14 +71,11 @@ class MCPFirestore:
             'nominatorName': str(nominator_name),
             'set_name': set_name,
             'category': category,
+            'creatorName': creator_name,
+            'creatorDiscordId': creator_discord_id,
+            'ip_category': ip_category,
             'timestamp': firestore.SERVER_TIMESTAMP
         }
-        if creator_name:
-            data['creatorName'] = creator_name
-        if creator_discord_id:
-            data['creatorDiscordId'] = creator_discord_id
-        if ip_category:
-            data['ip_category'] = ip_category
         doc_ref.set(data)
         return doc_ref.id
 
