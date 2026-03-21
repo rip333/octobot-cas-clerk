@@ -76,12 +76,12 @@ class VotingView(discord.ui.View):
         await interaction.response.defer()
         
     def add_selects(self, encounter_options, hero_options):
-        # Add Encounter Select (Max 2)
+        # Add Encounter Select (Max 3)
         if encounter_options:
             self.encounter_select = discord.ui.Select(
-                placeholder="Select up to 2 encounters...",
+                placeholder="Select up to 3 encounters...",
                 min_values=0,
-                max_values=min(2, len(encounter_options)),
+                max_values=min(3, len(encounter_options)),
                 options=encounter_options,
                 custom_id="voting_encounter_select"
             )
@@ -138,9 +138,9 @@ class VotingView(discord.ui.View):
             await interaction.response.defer()
             await interaction.followup.send("❌ **Error:** Hero maximum is 10.", ephemeral=True)
             return
-        if len(selected_encounters) > 2:
+        if len(selected_encounters) > 3:
             await interaction.response.defer()
-            await interaction.followup.send("❌ **Error:** Encounter maximum is 2.", ephemeral=True)
+            await interaction.followup.send("❌ **Error:** Encounter maximum is 3." , ephemeral=True)
             return
         if len(selected_heroes) == 0 and len(selected_encounters) == 0:
             await interaction.response.defer()
@@ -225,7 +225,7 @@ class Voting(commands.Cog):
         
         await interaction.followup.send(
             "**📢 Nominations are closed! Voting is now open!**\n\n"
-            "Use the `/vote` command to cast your ballot. You may vote for up to 10 Heroes and 2 Encounters.",
+            "Use the `/vote` command to cast your ballot. You may vote for up to 10 Heroes and 3 Encounters.",
             embed=embed
         )
 
@@ -272,7 +272,7 @@ class Voting(commands.Cog):
         
         await interaction.followup.send(
             "**🗳️ Cast Your Votes!**\n"
-            "Select up to **10 Heroes** and **2 Encounters**",
+            "Select up to **10 Heroes** and **3 Encounters**",
             view=view,
             ephemeral=True
         )
