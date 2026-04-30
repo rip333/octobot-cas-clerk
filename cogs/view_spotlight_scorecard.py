@@ -172,8 +172,8 @@ class ViewSpotlightScorecard(commands.Cog):
         await interaction.response.defer(ephemeral=True)
         
         metadata = self.db.get_cycle_metadata()
-        if metadata.get("state") != "voting":
-            await interaction.followup.send("❌ **Invalid state.** This command can only be run during the `voting` phase.", ephemeral=True)
+        if metadata.get("state") != "complete":
+            await interaction.followup.send("❌ **Invalid state.** This command can only be run during the `complete` phase (after voting closes).", ephemeral=True)
             return
         
         cycle_number = metadata.get("number", 0)

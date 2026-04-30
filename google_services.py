@@ -43,27 +43,6 @@ class GoogleServices:
         self.forms = build("forms", "v1", credentials=creds)
         self.script = build("script", "v1", credentials=creds)
 
-    def _get_template_items(self) -> list:
-        """Read all items (questions/sections) from the template form."""
-        template_form_id = os.environ.get("GOOGLE_TEMPLATE_FORM_ID", "")
-        if not template_form_id:
-            raise ValueError("GOOGLE_TEMPLATE_FORM_ID is not set in environment variables.")
-        form = self.forms.forms().get(formId=template_form_id).execute()
-        return form.get("items", [])
-
-    def _sanitize_item(self, item: dict) -> dict:
-        """
-        Recursively replace newline characters in string values.
-        The Forms API rejects \\n in any displayed text field.
-        """
-        if isinstance(item, dict):
-            return {k: self._sanitize_item(v) for k, v in item.items()}
-        if isinstance(item, list):
-            return [self._sanitize_item(v) for v in item]
-        if isinstance(item, str):
-            return item.replace("\n", " ").replace("\r", " ")
-        return item
-
     def _get_or_create_cycle_folder(self, cycle_number: int) -> str:
         """
         Gets or creates a folder named 'Spotlight Cycle {cycle_number}'.
@@ -127,53 +106,89 @@ class GoogleServices:
         and applies specific general, presentation, and post-submission settings.
         """
         title = f"Cycle {cycle_number} - {set_name} by {creator_name}"
+        if os.environ.get("ENVIRONMENT") == "test":
+            title = f"[TEST] {title}"
 
-        # 1. Create a blank form
-        new_form = self.forms.forms().create(body={
-            "info": {
-                "title": title,
-                "documentTitle": title
-            }
-        }).execute()
-        form_id = new_form["formId"]
+        # 1. Copy the template form using Drive API to preserve formatting, line breaks, etc.
+        template_form_id = os.environ.get("GOOGLE_TEMPLATE_FORM_ID", "")
+        if not template_form_id:
+            raise ValueError("GOOGLE_TEMPLATE_FORM_ID is not set in environment variables.")
 
-        # 2. Read the template items
-        template_items = self._get_template_items()
+        # Determine target folder
+        folder_id = self._get_or_create_cycle_folder(cycle_number)
 
-        # 3. Build batchUpdate requests
-        requests = []
+        copy_metadata = {
+            'name': title,
+            'parents': [folder_id]
+        }
         
-        # Add questions from template
-        for idx, item in enumerate(template_items):
-            item_copy = {k: v for k, v in item.items() if k != "itemId"}
-            item_copy = self._sanitize_item(item_copy)
-            requests.append({
-                "createItem": {
-                    "item": item_copy,
-                    "location": {"index": idx},
-                }
-            })
-
-        
-
-        if requests:
-            self.forms.forms().batchUpdate(
-                formId=form_id,
-                body={"requests": requests},
-            ).execute()
-
-        # Move to the cycle folder (existing logic)
         try:
-            folder_id = self._get_or_create_cycle_folder(cycle_number)
-            self.drive.files().update(
-                fileId=form_id,
-                addParents=folder_id,
-                removeParents='root', # Simplified for example
-                fields="id, parents",
+            new_form = self.drive.files().copy(
+                fileId=template_form_id,
+                body=copy_metadata,
                 supportsAllDrives=True
             ).execute()
+            form_id = new_form['id']
         except Exception as e:
-            print(f"Warning: Failed to move form {form_id} to folder: {e}")
+            raise RuntimeError(f"Failed to copy template form via Drive API: {e}")
+
+        # Update the internal form title (Drive API copy sets the documentTitle, but not necessarily the internal form title perfectly if it had logic)
+        try:
+            self.forms.forms().batchUpdate(
+                formId=form_id,
+                body={
+                    "requests": [
+                        {
+                            "updateFormInfo": {
+                                "info": {
+                                    "title": title
+                                },
+                                "updateMask": "title"
+                            }
+                        }
+                    ]
+                }
+            ).execute()
+        except Exception as e:
+            print(f"Warning: Failed to update internal form title for {form_id}: {e}")
+
+        # 1.a Explicitly publish the form to handle API changes (Forms created after June 30, 2026 default to unpublished)
+        try:
+            # Try to explicitly publish using the newly introduced methods
+            # using getattr to handle missing method during client library propagation
+            publish_method = getattr(self.forms.forms(), 'setPublishSettings', None)
+            if not publish_method:
+                 publish_method = getattr(self.forms.forms(), 'setPublishedSettings', None)
+
+            if publish_method:
+                 publish_method(
+                     formId=form_id, 
+                     body={
+                         "publishSettings": {
+                             "publishState": {
+                                 "isPublished": True
+                             }
+                         },
+                         "updateMask": "publishState"
+                     }
+                 ).execute()
+            else:
+                 print(f"Notice: Explicit publishing methods 'setPublishSettings'/'setPublishedSettings' not found on current google client for form {form_id}.")
+        except Exception as e:
+             print(f"Warning: Failed to explicitly publish form {form_id}: {e}")
+
+        # 1.b Share with responders (allow anyone with the link to respond)
+
+        try:
+            self.drive.permissions().create(
+                fileId=form_id,
+                body={
+                    'type': 'anyone',
+                    'role': 'reader'
+                }
+            ).execute()
+        except Exception as e:
+            print(f"Warning: Failed to set 'anyone' reader permission on form {form_id}: {e}")
 
         self._apply_form_settings_via_script(form_id)
 
@@ -182,6 +197,7 @@ class GoogleServices:
             "title": title,
             "edit_url": f"https://docs.google.com/forms/d/{form_id}/edit",
             "response_url": f"https://docs.google.com/forms/d/{form_id}/viewform",
+            "analytics_url": f"https://docs.google.com/forms/d/{form_id}/viewanalytics",
         }
 
     def get_form(self, form_id: str) -> dict:

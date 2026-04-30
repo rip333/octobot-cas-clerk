@@ -6,6 +6,9 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from discord.ext import commands
 from discord import app_commands
 from mcp_firestore import MCPFirestore
+import logging
+
+logger = logging.getLogger('octobot')
 
 def get_filtered_results(db):
     votes = db.get_all_votes()
@@ -178,20 +181,17 @@ class Voting(commands.Cog):
     @app_commands.command(name="start-voting", description="Admin: Switch the active cycle to the voting phase and alert users.")
     @app_commands.default_permissions(manage_messages=True)
     async def start_voting(self, interaction: discord.Interaction):
+        logger.info(f"Admin Action: start-voting initiated by {interaction.user.name} ({interaction.user.id})")
         await interaction.response.defer(ephemeral=False)
         
         metadata = self.db.get_cycle_metadata()
         if metadata.get("state") != "nominations":
             await interaction.followup.send("❌ **Invalid state.** This command can only be run during the `nominations` phase.", ephemeral=True)
             return
-        
-        # Update metadata state to voting
-        metadata["state"] = "voting"
-        self.db.update_cycle_metadata(metadata)
-        self.bot.nomination_state = "voting"
-        
-        deleted_count = self.db.clear_votes()
-        print(f"Deleted {deleted_count} votes from table.")
+            
+        if not interaction.guild:
+            await interaction.followup.send("❌ **Invalid environment.** This command must be run within a server.", ephemeral=True)
+            return
         
         # Build embed from current nominations
         results = self.db.get_nominations()
@@ -223,11 +223,22 @@ class Voting(commands.Cog):
         encounter_text = "\n".join(f"- {name}" for name in encounters) if encounters else "No encounter nominations."
         embed.add_field(name="Encounters", value=encounter_text, inline=False)
         
+        role = discord.utils.get(interaction.guild.roles, name="Community Seal Updates")
+        role_mention = role.mention if role else "@Community Seal Updates"
+        
         await interaction.followup.send(
-            "**📢 Nominations are closed! Voting is now open!**\n\n"
+            f"{role_mention} **📢 Nominations are now closed! Voting is now open!**\n\n"
             "Use the `/vote` command to cast your ballot. You may vote for up to 10 Heroes and 3 Encounters.",
             embed=embed
         )
+        
+        # Only clear votes and update state if the message successfully sends
+        deleted_count = self.db.clear_votes()
+        print(f"Deleted {deleted_count} votes from table.")
+        
+        metadata["state"] = "voting"
+        self.db.update_cycle_metadata(metadata)
+        self.bot.nomination_state = "voting"
 
     @app_commands.command(name="vote", description="Summon your personal ballot to vote on the current nominations.")
     async def vote(self, interaction: discord.Interaction):
@@ -277,77 +288,7 @@ class Voting(commands.Cog):
             ephemeral=True
         )
 
-    @app_commands.command(name="tally-votes", description="Tally the current votes and display the winners.")
-    @app_commands.default_permissions(manage_messages=True)
-    async def tally_votes(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
-        
-        metadata = self.db.get_cycle_metadata()
-        if metadata.get("state") != "voting":
-            await interaction.followup.send("❌ **Invalid state.** This command can only be run during the `voting` phase.", ephemeral=True)
-            return
-        
-        results = self.db.get_all_votes()
-        noms = self.db.get_nominations()
-        
-        nom_map = {}
-        for data in noms:
-            set_name = data.get('set_name', data.get('nomineeName', 'Unknown'))
-            creator_name = data.get('creatorName', '')
-            display_name = f"{set_name} — {creator_name}" if creator_name else set_name
-            nom_map[set_name] = display_name
-            
-        hero_counts = {}
-        encounter_counts = {}
-        total_voters = 0
-        
-        for data in results:
-            total_voters += 1
-            for hero_obj in data.get('heroes', []):
-                if isinstance(hero_obj, dict):
-                    set_name = hero_obj.get('set_name', hero_obj.get('nomineeName', 'Unknown'))
-                else:
-                    set_name = hero_obj.split(' — ')[0]
-                disp = nom_map.get(set_name, set_name)
-                hero_counts[disp] = hero_counts.get(disp, 0) + 1
-                
-            for encounter_obj in data.get('encounters', []):
-                if isinstance(encounter_obj, dict):
-                    set_name = encounter_obj.get('set_name', encounter_obj.get('nomineeName', 'Unknown'))
-                else:
-                    set_name = encounter_obj.split(' — ')[0]
-                disp = nom_map.get(set_name, set_name)
-                encounter_counts[disp] = encounter_counts.get(disp, 0) + 1
-                
-        if total_voters == 0:
-            await interaction.followup.send("No votes have been cast")
-            return
-            
-        sorted_heroes = sorted(hero_counts.items(), key=lambda x: (-x[1], x[0]))
-        sorted_encounters = sorted(encounter_counts.items(), key=lambda x: (-x[1], x[0]))
-            
-        embed = discord.Embed(title="Voting Results", color=discord.Color.gold(), description=f"Total Voters: **{total_voters}**")
-        
-        def format_results(items):
-            return "\n".join(f"**{count}** - {name}" for name, count in items)
-            
-        hero_text = format_results(sorted_heroes) if sorted_heroes else "No hero votes."
-        encounter_text = format_results(sorted_encounters) if sorted_encounters else "No encounter votes."
-            
-        def split_text(text):
-            return [text[i:i+1024] for i in range(0, len(text), 1024)]
-            
-        hero_chunks = split_text(hero_text)
-        for i, chunk in enumerate(hero_chunks):
-            name_val = "Hero Votes" if i == 0 else "Hero Votes (Cont.)"
-            embed.add_field(name=name_val, value=chunk, inline=False)
-            
-        encounter_chunks = split_text(encounter_text)
-        for i, chunk in enumerate(encounter_chunks):
-            name_val = "Encounter Votes" if i == 0 else "Encounter Votes (Cont.)"
-            embed.add_field(name=name_val, value=chunk, inline=False)
-            
-        await interaction.followup.send(embed=embed)
+
 
 async def setup(bot):
     await bot.add_cog(Voting(bot))

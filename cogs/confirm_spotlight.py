@@ -4,6 +4,9 @@ from discord import app_commands
 import asyncio
 from mcp_firestore import MCPFirestore
 from google_services import GoogleServices
+import logging
+
+logger = logging.getLogger('octobot')
 
 def build_roster_embed(roster: list, title: str) -> discord.Embed:
     embed = discord.Embed(title=title, color=discord.Color.green())
@@ -11,7 +14,9 @@ def build_roster_embed(roster: list, title: str) -> discord.Embed:
     def format_entry(entry):
         base = f"- {entry['set_name']}"
         if entry.get('response_url'):
-            base = f"{base} — [Form Link]({entry['response_url']})"
+            base = f"{base} — [Form]({entry['response_url']})"
+            if entry.get('analytics_url'):
+                base = f"{base} | [Results]({entry['analytics_url']})"
         return base
         
     marvel_heroes = [format_entry(h) for h in roster if h['category'] == 'Marvel']
@@ -95,16 +100,22 @@ class FinalConfirmView(discord.ui.View):
             for entry in self.roster:
                 try:
                     creator_name = entry.get("creatorName", "Unknown")
-                    form_result = gs.copy_form_for_set(entry["set_name"], self.cycle_number, creator_name)
+                    form_result = await asyncio.to_thread(
+                        gs.copy_form_for_set,
+                        entry["set_name"],
+                        self.cycle_number,
+                        creator_name
+                    )
                     
                     entry["form_id"] = form_result["form_id"]
                     entry["title"] = form_result["title"]
                     entry["edit_url"] = form_result["edit_url"]
                     entry["response_url"] = form_result["response_url"]
+                    entry["analytics_url"] = form_result["analytics_url"]
                     
                     status_lines.append(
                         f"- **{entry['set_name']}** ({entry['category']}):\n"
-                        f"  [Form]({form_result['response_url']})\n"
+                        f"  [Form]({form_result['response_url']}) | [Results]({form_result['analytics_url']})\n"
                     )
                 except Exception as form_err:
                     status_lines.append(f"- ⚠️ **{entry['set_name']}**: Form creation failed — {form_err}\n")
@@ -125,9 +136,13 @@ class FinalConfirmView(discord.ui.View):
         try:
             # Create Thread
             thread_name = f"Cycle {self.cycle_number} - Scorecards"
-            channel = interaction.channel
-            if isinstance(channel, discord.TextChannel) or isinstance(channel, discord.ForumChannel):
-                thread = await channel.create_thread(
+            
+            parent_channel = interaction.channel
+            if isinstance(parent_channel, discord.Thread):
+                parent_channel = parent_channel.parent
+
+            if isinstance(parent_channel, (discord.TextChannel, discord.ForumChannel)):
+                thread = await parent_channel.create_thread(
                     name=thread_name,
                     type=discord.ChannelType.public_thread,
                     auto_archive_duration=10080
@@ -145,8 +160,10 @@ class FinalConfirmView(discord.ui.View):
                 )
                 roster_embed = build_roster_embed(self.roster, f"Cycle {self.cycle_number} Scorecards")
                 await thread.send(welcome_msg, embed=roster_embed)
+            else:
+                await interaction.followup.send("⚠️ Could not create Scorecards thread: Command not run in a valid channel.", ephemeral=True)
 
-                self.db.end_cycle()
+            self.db.update_cycle(self.cycle_number, {"state": "review"})
                 
         except Exception as e:
             await interaction.followup.send(f"⚠️ Error: {e}", ephemeral=True)
@@ -175,11 +192,20 @@ class ConfirmSpotlight(commands.Cog):
     @app_commands.command(name="confirm-spotlight", description="Admin: Run the spotlight logic, resolve ties, and save the final roster.")
     @app_commands.default_permissions(manage_messages=True)
     async def confirm_spotlight(self, interaction: discord.Interaction):
+        logger.info(f"Admin Action: confirm-spotlight initiated by {interaction.user.name} ({interaction.user.id})")
         await interaction.response.defer(ephemeral=True)
         
         metadata = self.db.get_cycle_metadata()
         if metadata.get("state") != "voting":
             await interaction.followup.send("❌ **Invalid state.** This command can only be run during the `voting` phase.", ephemeral=True)
+            return
+            
+        parent_channel = interaction.channel
+        if isinstance(parent_channel, discord.Thread):
+            parent_channel = parent_channel.parent
+
+        if not isinstance(parent_channel, (discord.TextChannel, discord.ForumChannel)):
+            await interaction.followup.send("❌ **Invalid channel.** This command must be run in a text or forum channel (or a thread within one) so the bot can create the Scorecards thread.", ephemeral=True)
             return
         
         cycle_number = metadata.get("number", 0)

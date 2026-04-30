@@ -3,7 +3,19 @@ import os
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
+import logging
+import sys
 
+# Configure standard logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler("bot.log", encoding="utf-8")
+    ]
+)
+logger = logging.getLogger('octobot')
 load_dotenv()
 ALLOWED_GUILDS = [gid.strip() for gid in os.getenv("ALLOWED_GUILDS", "").split(",") if gid.strip()]
 
@@ -32,19 +44,25 @@ async def on_app_command_error(interaction: discord.Interaction, error: discord.
         
     # Respond to user
     error_msg = "An error occurred while executing the command. The admin has been logged the details."
-    if interaction.response.is_done():
-        await interaction.followup.send(error_msg, ephemeral=True)
-    else:
-        await interaction.response.send_message(error_msg, ephemeral=True)
+    try:
+        if interaction.response.is_done():
+            await interaction.followup.send(error_msg, ephemeral=True)
+        else:
+            await interaction.response.send_message(error_msg, ephemeral=True)
+    except discord.errors.NotFound:
+        print("Interaction expired before error message could be sent.")
 
 @client.event
 async def setup_hook():
-    await client.load_extension("cogs.nomination_report")
+    await client.load_extension("cogs.view_reports")
     await client.load_extension("cogs.cycle_management")
     await client.load_extension("cogs.voting")
     await client.load_extension("cogs.assign_ip")
     await client.load_extension("cogs.confirm_spotlight")
     await client.load_extension("cogs.view_spotlight_scorecard")
+    await client.load_extension("cogs.process_nominations")
+    await client.load_extension("cogs.confirm_seals")
+    await client.load_extension("cogs.view_seal_progress")
     await client.tree.sync()
     
     from mcp_firestore import MCPFirestore
@@ -83,106 +101,9 @@ async def global_guild_check(interaction: discord.Interaction) -> bool:
 import time
 
 import aiohttp
-
-user_last_msg_time = {}
-
 import asyncio
 
-from gemini_agent import GeminiAgent
 
-agent = GeminiAgent()
-
-@client.event
-async def on_message(message):
-    if message.author == client.user:
-        return
-
-    # Server Lockdown Check
-    if ALLOWED_GUILDS and str(message.guild.id if message.guild else "") not in ALLOWED_GUILDS:
-        return
-
-    # Thread ID check
-    target_thread = getattr(client, 'nomination_thread_id', 0)
-
-    if target_thread and getattr(message.channel, 'id', 0) != target_thread:
-        return
-
-    # Phase State Check
-    target_state = getattr(client, 'nomination_state', 'off')
-    if target_state != "nominations":
-        return
-
-    # 2s Rate Limit
-    now = time.time()
-    last_time = user_last_msg_time.get(message.author.id, 0)
-    if now - last_time < 2.0:
-        print(f"Rate limited {message.author.name}")
-        return
-    user_last_msg_time[message.author.id] = now
-
-    print(f"Processing message from {message.author}: {message.content}")
-    
-    # Gather thread context: first post + recent history + referenced message
-    thread_context = {}
-    try:
-        channel = message.channel
-
-        # 1. First post of the thread (contains the rules)
-        # Thread history is ordered oldest-first; grab the very first message.
-        first_messages = [m async for m in channel.history(limit=1, oldest_first=True)]
-        if first_messages and first_messages[0].id != message.id:
-            fm = first_messages[0]
-            thread_context["first_post"] = {
-                "author": fm.author.name,
-                "content": fm.content[:2000]  # cap just in case
-            }
-
-        # 2. Recent thread history (up to 10 messages before this one, compressed)
-        recent = []
-        async for m in channel.history(limit=12, before=message):
-            if m.id == message.id:
-                continue
-            recent.append({"author": m.author.name, "content": m.content[:500]})
-            if len(recent) >= 10:
-                break
-        # history() returns newest-first, so reverse to chronological order
-        thread_context["recent_messages"] = list(reversed(recent))
-
-        # 3. The specific message being replied to, if any
-        if message.reference and message.reference.message_id:
-            try:
-                ref_msg = await channel.fetch_message(message.reference.message_id)
-                thread_context["replied_to"] = {
-                    "author": ref_msg.author.name,
-                    "content": ref_msg.content[:1000]
-                }
-            except Exception:
-                pass  # If we can't fetch it, just skip
-
-    except Exception as ctx_err:
-        print(f"Could not fetch thread context: {ctx_err}")
-
-    # Run the Gemini Agent process in an executor so we don't block the async event loop
-    try:
-        loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(
-            None,
-            agent.process_message,
-            message.content,
-            str(message.author.id),
-            message.author.name,
-            thread_context
-        )
-        print(f"Gemini Outcome: {result.get('gemini_response')}")
-        
-        actions = result.get('actions', [])
-        for action in actions:
-            if action.get('action') == 'add_nomination':
-                await message.add_reaction("📥")
-                break
-                
-    except Exception as e:
-        print(f"Failed to process via Gemini: {e}")
 
 if __name__ == "__main__":
     client.run(os.getenv("DISCORD_TOKEN"))
