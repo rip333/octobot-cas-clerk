@@ -112,12 +112,13 @@ class ConfirmSeals(commands.Cog):
                     sealed_for_db.append({**original, "sealed": True})
                 self.db.copy_to_sealed_sets(cycle_number, sealed_for_db)
 
-            sealed_names = {r["set_name"] for r in sealed_results}
-            updated_spotlights = [
-                {**entry, "sealed": entry.get("set_name") in sealed_names}
-                for entry in spotlights
-            ]
-            self.db.save_spotlight_roster(cycle_number, updated_spotlights)
+            # Update the sealed flag on each individual spotlight entry
+            for result in results:
+                self.db.update_spotlight_entry(
+                    cycle_number,
+                    result["set_name"],
+                    {"sealed": result["sealed"]}
+                )
 
         except Exception as e:
             logger.error(f"confirm-seals: DB write failed: {e}")

@@ -41,7 +41,6 @@ class StartCycleModal(discord.ui.Modal, title='Start Cycle'):
                 "state": "planning",
                 "is_active": True,
                 "nomination_thread_id": 0,
-                "spotlights": []
             }
             self.db.db.collection(self.db.collection_prefix + 'cycles').document(str(chosen_cycle)).set(default_cycle)
 

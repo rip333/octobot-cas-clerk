@@ -32,7 +32,6 @@ class MCPFirestore:
             "state": "planning",
             "is_active": True,
             "nomination_thread_id": 0,
-            "spotlights": []
         }
         self.db.collection(self.collection_prefix + 'cycles').document(str(cycle_num)).set(default_cycle)
         return default_cycle
@@ -83,7 +82,6 @@ class MCPFirestore:
             "state": "planning",
             "is_active": True,
             "nomination_thread_id": 0,
-            "spotlights": []
         })
         return True
 
@@ -181,8 +179,38 @@ class MCPFirestore:
             count += 1
         return count
 
+    def _spotlights_ref(self, cycle_number: int):
+        """Return a reference to the spotlights subcollection for a cycle."""
+        return (
+            self.db
+            .collection(self.collection_prefix + 'cycles')
+            .document(str(cycle_number))
+            .collection(self.collection_prefix + 'spotlights')
+        )
+
     def save_spotlight_roster(self, cycle_number: int, roster: list) -> bool:
-        self.update_cycle(cycle_number, {"spotlights": roster})
+        """Write the full spotlight roster as individual subcollection documents.
+        Deletes any pre-existing entries first so the result is always a clean slate."""
+        col = self._spotlights_ref(cycle_number)
+        batch = self.db.batch()
+
+        # Clear any previously saved spotlight docs
+        for doc in col.stream():
+            batch.delete(doc.reference)
+
+        # Write each entry keyed by set_name
+        for entry in roster:
+            set_name = entry.get("set_name", "")
+            if not set_name:
+                continue
+            batch.set(col.document(set_name), entry)
+
+        batch.commit()
+        return True
+
+    def update_spotlight_entry(self, cycle_number: int, set_name: str, data: dict) -> bool:
+        """Merge-update a single spotlight entry without touching other entries."""
+        self._spotlights_ref(cycle_number).document(set_name).set(data, merge=True)
         return True
         
     def copy_to_sealed_sets(self, cycle_number: int, sealed_roster: list) -> bool:
@@ -219,13 +247,10 @@ class MCPFirestore:
         return False
 
     def get_spotlight_roster(self, cycle_number: int) -> dict:
-        cycle_data = self.get_cycle(cycle_number)
-        if 'spotlights' in cycle_data:
-            return {
-                'cycle': cycle_number,
-                'spotlights': cycle_data['spotlights']
-            }
-        return {}
+        """Stream the spotlights subcollection and return entries as a list."""
+        docs = self._spotlights_ref(cycle_number).stream()
+        spotlights = [doc.to_dict() for doc in docs]
+        return {'cycle': cycle_number, 'spotlights': spotlights}
 
     def get_ineligible_creators(self, cycle_number: int) -> tuple[list, list]:
         previous_cycle = cycle_number - 1
