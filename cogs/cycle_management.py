@@ -8,7 +8,7 @@ import logging
 logger = logging.getLogger('octobot')
 
 class StartCycleModal(discord.ui.Modal, title='Start Cycle'):
-    def __init__(self, db, bot, default_cycle_num, channel):
+    def __init__(self, db, bot, default_cycle_num, default_next_num, channel):
         super().__init__()
         self.db = db
         self.bot = bot
@@ -18,7 +18,7 @@ class StartCycleModal(discord.ui.Modal, title='Start Cycle'):
         self.cycle_number = discord.ui.TextInput(
             label='Cycle Number',
             style=discord.TextStyle.short,
-            default=str(default_cycle_num),
+            default=str(default_next_num),
             required=True
         )
         self.add_item(self.cycle_number)
@@ -31,18 +31,22 @@ class StartCycleModal(discord.ui.Modal, title='Start Cycle'):
             await interaction.followup.send("❌ Please enter a valid integer for the cycle number.", ephemeral=True)
             return
 
-        if chosen_cycle != self.default_cycle_num:
-            # Update the current_cycle source of truth in Firestore
-            self.db.db.collection(self.db.collection_prefix + 'cycles').document('current_cycle').set({"number": chosen_cycle})
-            
-            # Initialize the base document for the new cycle
-            default_cycle = {
-                "number": chosen_cycle,
-                "state": "planning",
-                "is_active": True,
-                "nomination_thread_id": 0,
-            }
-            self.db.db.collection(self.db.collection_prefix + 'cycles').document(str(chosen_cycle)).set(default_cycle)
+        all_cycles = self.db.get_all_cycles()
+        if chosen_cycle in all_cycles:
+            await interaction.followup.send(f"❌ Cycle {chosen_cycle} already exists. Please pick a new number.", ephemeral=True)
+            return
+
+        # Update the current_cycle source of truth in Firestore
+        self.db.db.collection(self.db.collection_prefix + 'cycles').document('current_cycle').set({"number": chosen_cycle})
+        
+        # Initialize the base document for the new cycle
+        default_cycle = {
+            "number": chosen_cycle,
+            "state": "planning",
+            "is_active": True,
+            "nomination_thread_id": 0,
+        }
+        self.db.db.collection(self.db.collection_prefix + 'cycles').document(str(chosen_cycle)).set(default_cycle)
 
         # Proceed with start logic using chosen_cycle
         hero_creators, encounter_creators = self.db.get_ineligible_creators(chosen_cycle)
@@ -118,8 +122,9 @@ class CycleManagement(commands.Cog):
             return
         
         current_cycle_number = int(metadata.get("number"))
+        next_cycle_number = current_cycle_number + 1
         
-        modal = StartCycleModal(self.db, self.bot, current_cycle_number, channel)
+        modal = StartCycleModal(self.db, self.bot, current_cycle_number, next_cycle_number, channel)
         await interaction.response.send_modal(modal)
         
 async def setup(bot):

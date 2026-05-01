@@ -3,6 +3,64 @@ from discord.ext import commands
 from discord import app_commands
 from mcp_firestore import MCPFirestore
 from google_services import GoogleServices
+import logging
+
+logger = logging.getLogger('octobot')
+
+
+class ScorecardCycleSelectView(discord.ui.View):
+    """First step: pick a cycle. Mirrors the pattern in view_reports.py."""
+    def __init__(self, db):
+        super().__init__(timeout=300)
+        self.db = db
+
+        cycles = self.db.get_all_cycles()
+        current_cycle = self.db.get_current_cycle_number()
+        self.selected_cycle = current_cycle
+
+        options = []
+        for c in cycles:
+            is_current = (c == current_cycle)
+            label = f"Cycle {c} (current)" if is_current else f"Cycle {c}"
+            options.append(discord.SelectOption(label=label, value=str(c), default=is_current))
+
+        if len(options) > 25:
+            options = options[:25]
+
+        self.select = discord.ui.Select(
+            placeholder="Select a cycle to view scorecards...",
+            min_values=1,
+            max_values=1,
+            options=options,
+        )
+        self.select.callback = self.select_callback
+        self.add_item(self.select)
+
+        self.submit_button = discord.ui.Button(label="Submit", style=discord.ButtonStyle.primary)
+        self.submit_button.callback = self.submit_callback
+        self.add_item(self.submit_button)
+
+    async def select_callback(self, interaction: discord.Interaction):
+        self.selected_cycle = int(self.select.values[0])
+        await interaction.response.defer()
+
+    async def submit_callback(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+        cycle_number = self.selected_cycle
+
+        cycle_forms_data = self.db.get_spotlight_roster(cycle_number)
+        forms_list = cycle_forms_data.get("spotlights", [])
+
+        # Filter to entries that actually have a Google Form link
+        forms_with_links = [f for f in forms_list if f.get("form_id")]
+
+        if not forms_with_links:
+            await interaction.followup.send(f"No scorecard forms found for Cycle {cycle_number}.", ephemeral=True)
+            return
+
+        view = ScorecardSelectView(forms_with_links, interaction)
+        await interaction.edit_original_response(content="Select a spotlight set below to view its scorecard results:", view=view)
+
 
 class ScorecardSelectView(discord.ui.View):
     def __init__(self, forms_data, original_interaction):
@@ -14,7 +72,7 @@ class ScorecardSelectView(discord.ui.View):
         options = []
         for form in forms_data:
             # title is usually: Cycle X - [Set Name] by [Creator]
-            title = form.get("title", "Unknown Form")
+            title = form.get("title", form.get("set_name", "Unknown Form"))
             options.append(discord.SelectOption(
                 label=title[:100], 
                 value=form.get("form_id"),
@@ -36,7 +94,7 @@ class ScorecardSelectView(discord.ui.View):
         form_title = "Scorecard Results"
         for f in self.forms_data:
             if f.get("form_id") == form_id:
-                form_title = f.get("title", "Scorecard Results")
+                form_title = f.get("title", f.get("set_name", "Scorecard Results"))
                 break
                 
         try:
@@ -160,6 +218,7 @@ class ScorecardSelectView(discord.ui.View):
             await interaction.followup.send(embed=embed, ephemeral=True)
             
         except Exception as e:
+            logger.error(f"Error fetching scorecard data: {e}", exc_info=True)
             await interaction.followup.send(f"Error fetching data from Google Forms API:\n{e}", ephemeral=True)
 
 class ViewSpotlightScorecard(commands.Cog):
@@ -167,26 +226,20 @@ class ViewSpotlightScorecard(commands.Cog):
         self.bot = bot
         self.db = MCPFirestore()
 
-    @app_commands.command(name="view-spotlight-scorecard", description="View the current form responses and averages for a spotlight set natively.")
+    @app_commands.command(name="view-spotlight-scorecard", description="View form responses and averages for a spotlight set's scorecard.")
+    @app_commands.default_permissions(manage_messages=True)
     async def view_spotlight_scorecard(self, interaction: discord.Interaction):
+        logger.info(f"Admin Action: view-spotlight-scorecard initiated by {interaction.user.name} ({interaction.user.id})")
         await interaction.response.defer(ephemeral=True)
         
-        metadata = self.db.get_cycle_metadata()
-        if metadata.get("state") != "complete":
-            await interaction.followup.send("❌ **Invalid state.** This command can only be run during the `complete` phase (after voting closes).", ephemeral=True)
+        cycles = self.db.get_all_cycles()
+        if not cycles:
+            await interaction.followup.send("No cycles found in the database.", ephemeral=True)
             return
-        
-        cycle_number = metadata.get("number", 0)
-        
-        cycle_forms_data = self.db.get_spotlight_roster(cycle_number)
-        forms_list = cycle_forms_data.get("spotlights", [])
-        
-        if not forms_list:
-            await interaction.followup.send(f"No Google Forms have been created for Cycle {cycle_number} yet.")
-            return
-            
-        view = ScorecardSelectView(forms_list, interaction)
-        await interaction.followup.send("Select a spotlight set below to view its scorecard results:", view=view, ephemeral=True)
+
+        view = ScorecardCycleSelectView(self.db)
+        await interaction.followup.send("Select a cycle to view its spotlight scorecards:", view=view, ephemeral=True)
 
 async def setup(bot):
     await bot.add_cog(ViewSpotlightScorecard(bot))
+

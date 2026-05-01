@@ -214,14 +214,25 @@ class MCPFirestore:
         return True
         
     def copy_to_sealed_sets(self, cycle_number: int, sealed_roster: list) -> bool:
+        import logging
+        logger = logging.getLogger('octobot')
+        collection_name = self.collection_prefix + 'sealed_sets'
+        logger.info(f"copy_to_sealed_sets: Writing {len(sealed_roster)} item(s) to '{collection_name}' for cycle {cycle_number}")
+        
+        if not sealed_roster:
+            logger.warning("copy_to_sealed_sets: sealed_roster is empty, nothing to write.")
+            return False
+        
         batch = self.db.batch()
         for item in sealed_roster:
-            doc_ref = self.db.collection(self.collection_prefix + 'sealed_sets').document()
+            doc_ref = self.db.collection(collection_name).document()
             item_data = item.copy()
             item_data['cycle_number'] = cycle_number
             item_data['timestamp'] = firestore.SERVER_TIMESTAMP
             batch.set(doc_ref, item_data)
+            logger.info(f"copy_to_sealed_sets: Queued '{item_data.get('set_name', 'UNKNOWN')}' -> {doc_ref.path}")
         batch.commit()
+        logger.info(f"copy_to_sealed_sets: Batch committed successfully.")
         return True
 
     def save_ip_assignment(self, cycle_number: int, set_name: str, ip_category: str) -> bool:

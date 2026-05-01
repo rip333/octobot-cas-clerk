@@ -10,6 +10,35 @@ import logging
 logger = logging.getLogger('octobot')
 
 
+class ConfirmSealView(discord.ui.View):
+    """Confirm/Cancel prompt shown after displaying seal results, before writing to the DB."""
+    def __init__(self):
+        super().__init__(timeout=300)
+        self._decision: asyncio.Future = asyncio.get_event_loop().create_future()
+
+    @property
+    def decision(self) -> asyncio.Future:
+        return self._decision
+
+    def _disable_all(self):
+        for child in self.children:
+            child.disabled = True
+
+    @discord.ui.button(label="Confirm & Save to Database", style=discord.ButtonStyle.success)
+    async def btn_confirm(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self._disable_all()
+        await interaction.response.edit_message(content="✅ Confirmed. Writing seal results to the database…", view=self)
+        if not self._decision.done():
+            self._decision.set_result(True)
+
+    @discord.ui.button(label="Cancel", style=discord.ButtonStyle.danger)
+    async def btn_cancel(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self._disable_all()
+        await interaction.response.edit_message(content="❌ Cancelled. No changes were made to the database.", view=self)
+        if not self._decision.done():
+            self._decision.set_result(False)
+
+
 class ConfirmSeals(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
@@ -96,12 +125,43 @@ class ConfirmSeals(commands.Cog):
             )
             return
 
-        # --- transactional DB writes ---
+        # --- display results for review ---
         sealed_results = [r for r in results if r["sealed"]]
         failed_results = [r for r in results if not r["sealed"]]
 
+        summary_lines = [
+            f"## 🏅 Cycle {cycle_number} — Seal Results Preview\n",
+            f"**{len(sealed_results)} / {len(results)} set(s) would earn the Community Seal.**\n",
+        ]
+        if fetch_errors:
+            summary_lines.append("⚠️ **Fetch errors (these sets were skipped):**")
+            summary_lines.extend(fetch_errors)
+            summary_lines.append("")
+
+        await interaction.followup.send("\n".join(summary_lines), ephemeral=True)
+
+        for result in (sealed_results + failed_results):
+            embed = build_result_embed(result, cycle_number, show_seal_status=True)
+            await interaction.followup.send(embed=embed, ephemeral=True)
+
+        # --- confirmation prompt ---
+        confirm_view = ConfirmSealView()
+        await interaction.followup.send(
+            f"**Review the results above.** Confirming will write {len(sealed_results)} sealed set(s) "
+            "to the database and update spotlight roster flags. This cannot be undone.",
+            view=confirm_view,
+            ephemeral=True,
+        )
+
+        proceed = await confirm_view.decision
+        if not proceed:
+            await interaction.followup.send("❌ Aborted. No database changes were made.", ephemeral=True)
+            return
+
+        # --- transactional DB writes ---
         db_error = None
         try:
+            logger.info(f"confirm-seals: {len(sealed_results)} sealed, {len(failed_results)} failed out of {len(results)} total")
             if sealed_results:
                 sealed_for_db = []
                 for r in sealed_results:
@@ -110,7 +170,10 @@ class ConfirmSeals(commands.Cog):
                         {}
                     )
                     sealed_for_db.append({**original, "sealed": True})
+                logger.info(f"confirm-seals: Writing {len(sealed_for_db)} entries to sealed_sets")
                 self.db.copy_to_sealed_sets(cycle_number, sealed_for_db)
+            else:
+                logger.info("confirm-seals: No sealed results — skipping sealed_sets write.")
 
             # Update the sealed flag on each individual spotlight entry
             for result in results:
@@ -120,39 +183,22 @@ class ConfirmSeals(commands.Cog):
                     {"sealed": result["sealed"]}
                 )
 
+            # Transition cycle state to complete
+            self.db.update_cycle(cycle_number, {"state": "complete", "is_active": False})
+
         except Exception as e:
             logger.error(f"confirm-seals: DB write failed: {e}")
             db_error = e
 
-        # --- build report ---
-        summary_lines = [
-            f"## 🏅 Cycle {cycle_number} — Seal Results\n",
-            f"**{len(sealed_results)} / {len(results)} set(s) earned the Community Seal.**\n",
-        ]
-        if fetch_errors:
-            summary_lines.append("⚠️ **Fetch errors (these sets were skipped):**")
-            summary_lines.extend(fetch_errors)
-            summary_lines.append("")
-        if db_error:
-            summary_lines.append(
-                f"⚠️ **Database write failed — results above are correct but were NOT saved:** {db_error}"
-            )
-
-        await interaction.followup.send("\n".join(summary_lines), ephemeral=True)
-
-        for result in (sealed_results + failed_results):
-            embed = build_result_embed(result, cycle_number, show_seal_status=True)
-            await interaction.followup.send(embed=embed, ephemeral=True)
-
         if db_error is None:
             await interaction.followup.send(
                 f"✅ Database updated. {len(sealed_results)} set(s) written to `sealed_sets`. "
-                "Spotlight roster `sealed` flags updated.",
+                "Spotlight roster flags updated. Cycle state set to **complete**.",
                 ephemeral=True
             )
         else:
             await interaction.followup.send(
-                "❌ The evaluation is correct, but the database write failed. "
+                f"❌ The evaluation is correct, but the database write failed: {db_error}\n"
                 "Please check the logs and re-run after resolving the issue.",
                 ephemeral=True
             )
@@ -160,3 +206,4 @@ class ConfirmSeals(commands.Cog):
 
 async def setup(bot):
     await bot.add_cog(ConfirmSeals(bot))
+

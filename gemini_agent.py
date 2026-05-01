@@ -1,6 +1,13 @@
 import os
+import logging
 
 from google import genai
+from google.api_core import exceptions as google_exceptions
+
+logger = logging.getLogger('octobot')
+
+# Rough token limit for Gemini 2.5 Flash (1M context), with buffer for system prompt overhead
+MAX_ESTIMATED_TOKENS = 900_000
 
 from mcp_firestore import MCPFirestore
 from pydantic import BaseModel, Field
@@ -63,6 +70,15 @@ class GeminiAgent:
         {history_text}
         """
 
+        # Pre-flight check: estimate token count and bail early if too large
+        estimated_tokens = len(system_instruction) // 4
+        if estimated_tokens > MAX_ESTIMATED_TOKENS:
+            logger.error(f"Thread history too large for Gemini context window. Estimated tokens: {estimated_tokens:,} (limit: {MAX_ESTIMATED_TOKENS:,})")
+            return {
+                "status": "error",
+                "error": f"Thread history is too large to process (~{estimated_tokens:,} estimated tokens). Max is ~{MAX_ESTIMATED_TOKENS:,}."
+            }
+
         try:
             response = self.client.models.generate_content(
                 model='gemini-2.5-flash',
@@ -79,8 +95,18 @@ class GeminiAgent:
             import json
             result_dict = json.loads(response.text)
             return {"status": "success", "nominations": result_dict.get("nominations", [])}
-            
+
+        except google_exceptions.InvalidArgument as e:
+            logger.error(f"Gemini API rejected the request (likely context length): {e}")
+            return {"status": "error", "error": f"Gemini rejected the request — the thread history may be too large. Details: {e}"}
+        except google_exceptions.ResourceExhausted as e:
+            logger.error(f"Gemini API quota exceeded: {e}")
+            return {"status": "error", "error": f"Gemini API quota exceeded. Try again later. Details: {e}"}
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.error(f"Failed to parse Gemini response as JSON: {e}")
+            return {"status": "error", "error": f"Gemini returned an unparseable response: {e}"}
         except Exception as e:
+            logger.error(f"Unexpected error during Gemini processing: {e}", exc_info=True)
             return {"status": "error", "error": str(e)}
 
 

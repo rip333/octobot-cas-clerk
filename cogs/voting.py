@@ -169,6 +169,7 @@ class VotingView(discord.ui.View):
         # Record to Firestore
         user_id = str(interaction.user.id)
         user_name = interaction.user.display_name
+        logger.info(f"User Action: Vote submitted by {user_name} ({user_id}) - Heroes: {len(heroes_objs)}, Encounters: {len(encounters_objs)}")
         self.db.record_user_vote(user_id, user_name, heroes_objs, encounters_objs)
         
         content = f"**✅ votes_submitted**"
@@ -322,7 +323,7 @@ class Voting(commands.Cog):
         confirm_view = ConfirmProceedView()
         await interaction.followup.send(
             "**📋 Review the final nominations below.**\n\n"
-            "Confirming will **close nominations and open voting** publicly. This cannot be undone.",
+            "Confirming will close nominations and open voting.",
             embed=embed,
             view=confirm_view,
             ephemeral=True,
@@ -349,6 +350,7 @@ class Voting(commands.Cog):
 
     @app_commands.command(name="vote", description="Summon your personal ballot to vote on the current nominations.")
     async def vote(self, interaction: discord.Interaction):
+        logger.info(f"User Action: vote initiated by {interaction.user.name} ({interaction.user.id})")
         await interaction.response.defer(ephemeral=True)
         
         # Ensure voting is actually open

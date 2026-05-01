@@ -6,6 +6,7 @@ Used by:
   - cogs/view_seal_progress.py (evaluate + display only)
 """
 
+import os
 import discord
 from google_services import GoogleServices
 
@@ -14,7 +15,7 @@ from google_services import GoogleServices
 # ---------------------------------------------------------------------------
 
 # Minimum number of submitted reviews required to be eligible for a Seal.
-MIN_REVIEWS = 5
+MIN_REVIEWS = 1 if os.getenv("ENVIRONMENT") == "test" else 5
 
 # Percentage of reviews (>=) that must score >= PASS_SCORE to earn the Seal.
 PASS_RATE_THRESHOLD = 0.70
@@ -140,8 +141,12 @@ def evaluate_set(form_id: str, entry: dict, gs: GoogleServices) -> dict:
         if not q_item:
             continue
         q = q_item.get("question", {})
-        if q and "questionId" in q:
-            question_map[q["questionId"]] = item.get("title", "Unknown")
+        if not q or "questionId" not in q:
+            continue
+        # Only include scale questions (numerical scores), skip text/comment fields
+        if "scaleQuestion" not in q and "choiceQuestion" not in q:
+            continue
+        question_map[q["questionId"]] = item.get("title", "Unknown")
 
     # Fetch all responses
     responses = gs.get_form_responses(form_id)
@@ -278,19 +283,21 @@ def build_result_embed(result: dict, cycle_number: int,
             inline=False
         )
 
-    # Per-category breakdown
+    # Per-category breakdown (only categories with data)
     if result["category_averages"]:
         lines = []
         for title, avg in sorted(result["category_averages"].items()):
+            if avg is None:
+                continue
             weight = _match_weight(title)
             w_pct = f"{weight * 100:.0f}%" if weight else "?"
-            val = f"{avg:.2f}/10" if avg is not None else "—"
-            lines.append(f"• **{title}** (weight {w_pct}): {val}")
-        embed.add_field(
-            name="Category Breakdown",
-            value="\n".join(lines) or "No data",
-            inline=False
-        )
+            lines.append(f"• **{title}** (weight {w_pct}): {avg:.2f}/10")
+        if lines:
+            embed.add_field(
+                name="Category Breakdown",
+                value="\n".join(lines),
+                inline=False
+            )
 
     # Failure reasons (only shown when show_seal_status=True)
     if show_seal_status and not sealed:

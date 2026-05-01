@@ -155,6 +155,7 @@ class ProcessNominations(commands.Cog):
         result = await run_nomination_tally(self.bot, self.db)
 
         if result["success"]:
+            logger.info(f"tally-nominations: Successfully extracted and saved {result['added_count']} nomination(s).")
             await interaction.followup.send(
                 f"✅ Successfully processed thread. Extracted and saved **{result['added_count']}** nomination(s).",
                 ephemeral=True,

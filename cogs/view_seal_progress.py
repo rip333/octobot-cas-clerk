@@ -10,33 +10,45 @@ import logging
 logger = logging.getLogger('octobot')
 
 
-class ViewSealProgress(commands.Cog):
-    def __init__(self, bot):
-        self.bot = bot
-        self.db = MCPFirestore()
+class SealProgressCycleSelectView(discord.ui.View):
+    """First step: pick a cycle to view seal progress for."""
+    def __init__(self, db):
+        super().__init__(timeout=300)
+        self.db = db
 
-    @app_commands.command(
-        name="view-seal-progress",
-        description="Admin: View live scoring progress for all Spotlight sets in the current review cycle."
-    )
-    @app_commands.default_permissions(manage_messages=True)
-    async def view_seal_progress(self, interaction: discord.Interaction):
-        logger.info(
-            f"Admin Action: view-seal-progress initiated by "
-            f"{interaction.user.name} ({interaction.user.id})"
+        cycles = self.db.get_all_cycles()
+        current_cycle = self.db.get_current_cycle_number()
+        self.selected_cycle = current_cycle
+
+        options = []
+        for c in cycles:
+            is_current = (c == current_cycle)
+            label = f"Cycle {c} (current)" if is_current else f"Cycle {c}"
+            options.append(discord.SelectOption(label=label, value=str(c), default=is_current))
+
+        if len(options) > 25:
+            options = options[:25]
+
+        self.select = discord.ui.Select(
+            placeholder="Select a cycle to view seal progress...",
+            min_values=1,
+            max_values=1,
+            options=options,
         )
+        self.select.callback = self.select_callback
+        self.add_item(self.select)
+
+        self.submit_button = discord.ui.Button(label="Submit", style=discord.ButtonStyle.primary)
+        self.submit_button.callback = self.submit_callback
+        self.add_item(self.submit_button)
+
+    async def select_callback(self, interaction: discord.Interaction):
+        self.selected_cycle = int(self.select.values[0])
+        await interaction.response.defer()
+
+    async def submit_callback(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
-
-        # --- state gate ---
-        metadata = self.db.get_cycle_metadata()
-        if metadata.get("state") != "review":
-            await interaction.followup.send(
-                "❌ **Invalid state.** This command can only be run during the `review` phase.",
-                ephemeral=True
-            )
-            return
-
-        cycle_number = int(metadata.get("number", 0))
+        cycle_number = self.selected_cycle
 
         # --- fetch roster ---
         roster_data = self.db.get_spotlight_roster(cycle_number)
@@ -45,14 +57,14 @@ class ViewSealProgress(commands.Cog):
         sets_with_forms = [s for s in spotlights if s.get("form_id")]
         if not sets_with_forms:
             await interaction.followup.send(
-                f"❌ No Google Forms found for Cycle {cycle_number}.",
+                f"No scorecard forms found for Cycle {cycle_number}.",
                 ephemeral=True
             )
             return
 
-        await interaction.followup.send(
-            f"⏳ Fetching live scores for {len(sets_with_forms)} set(s)…",
-            ephemeral=True
+        await interaction.edit_original_response(
+            content=f"⏳ Fetching live scores for {len(sets_with_forms)} set(s)…",
+            view=None,
         )
 
         # --- initialise Google Services ---
@@ -104,6 +116,36 @@ class ViewSealProgress(commands.Cog):
         for result in (on_track + off_track):
             embed = build_result_embed(result, cycle_number, show_seal_status=False)
             await interaction.followup.send(embed=embed, ephemeral=True)
+
+
+class ViewSealProgress(commands.Cog):
+    def __init__(self, bot):
+        self.bot = bot
+        self.db = MCPFirestore()
+
+    @app_commands.command(
+        name="view-seal-progress",
+        description="View live scoring progress for all Spotlight sets in a cycle."
+    )
+    @app_commands.default_permissions(manage_messages=True)
+    async def view_seal_progress(self, interaction: discord.Interaction):
+        logger.info(
+            f"Admin Action: view-seal-progress initiated by "
+            f"{interaction.user.name} ({interaction.user.id})"
+        )
+        await interaction.response.defer(ephemeral=True)
+
+        cycles = self.db.get_all_cycles()
+        if not cycles:
+            await interaction.followup.send("No cycles found in the database.", ephemeral=True)
+            return
+
+        view = SealProgressCycleSelectView(self.db)
+        await interaction.followup.send(
+            "Select a cycle to view its seal progress:",
+            view=view,
+            ephemeral=True
+        )
 
 
 async def setup(bot):

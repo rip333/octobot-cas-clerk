@@ -13,7 +13,14 @@ class CycleSelectView(discord.ui.View):
         self.action_type = action_type # "nominations" or "votes"
         
         cycles = self.db.get_all_cycles()
-        options = [discord.SelectOption(label=f"Cycle {c}", value=str(c)) for c in cycles]
+        current_cycle = self.db.get_current_cycle_number()
+        self.selected_cycle = current_cycle  # default to current cycle
+        
+        options = []
+        for c in cycles:
+            is_current = (c == current_cycle)
+            label = f"Cycle {c} (current)" if is_current else f"Cycle {c}"
+            options.append(discord.SelectOption(label=label, value=str(c), default=is_current))
         
         # Discord limits select menus to 25 options. Just slice the latest 25 for now.
         if len(options) > 25:
@@ -28,9 +35,17 @@ class CycleSelectView(discord.ui.View):
         self.select.callback = self.select_callback
         self.add_item(self.select)
 
+        self.submit_button = discord.ui.Button(label="Submit", style=discord.ButtonStyle.primary)
+        self.submit_button.callback = self.submit_callback
+        self.add_item(self.submit_button)
+
     async def select_callback(self, interaction: discord.Interaction):
+        self.selected_cycle = int(self.select.values[0])
+        await interaction.response.defer()
+
+    async def submit_callback(self, interaction: discord.Interaction):
         await interaction.response.defer(ephemeral=True)
-        cycle_number = int(self.select.values[0])
+        cycle_number = self.selected_cycle
         
         if self.action_type == "nominations":
             await self.show_nominations(interaction, cycle_number)

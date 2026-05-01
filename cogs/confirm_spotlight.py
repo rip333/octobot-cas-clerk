@@ -97,6 +97,7 @@ class FinalConfirmView(discord.ui.View):
             gs = GoogleServices()
 
             status_lines.append("**Scorecard Forms:**\n")
+            failed_forms = []
             for entry in self.roster:
                 try:
                     creator_name = entry.get("creatorName", "Unknown")
@@ -118,14 +119,22 @@ class FinalConfirmView(discord.ui.View):
                         f"  [Form]({form_result['response_url']}) | [Results]({form_result['analytics_url']})\n"
                     )
                 except Exception as form_err:
-                    status_lines.append(f"- ⚠️ **{entry['set_name']}**: Form creation failed — {form_err}\n")
+                    failed_forms.append(entry['set_name'])
+                    status_lines.append(f"- ❌ **{entry['set_name']}**: Form creation failed — {form_err}\n")
+
+            if failed_forms:
+                status_lines.insert(0, f"**❌ Aborted — {len(failed_forms)} form(s) failed to create/publish. Cycle state was NOT changed.**\n\n")
+                form_output_block = "".join(status_lines)
+                await interaction.edit_original_response(content=form_output_block, view=self)
+                return
 
             # 2. Save the final roster containing all form data into the single Firestore source of truth.
             self.db.save_spotlight_roster(self.cycle_number, self.roster)
 
         except Exception as e:
             logger.error(f"Error in confirm-spotlight button callback: {e}", exc_info=True)
-            status_lines.append(f"\n⚠️ Error creating forms or saving roster: {e}")
+            await interaction.edit_original_response(content=f"**❌ Aborted — unexpected error: {e}**\nCycle state was NOT changed.", view=self)
+            return
 
         # 4. Generate Feedback Thread + Update Status
         form_output_block = "".join(status_lines)

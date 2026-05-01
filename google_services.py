@@ -153,42 +153,34 @@ class GoogleServices:
             print(f"Warning: Failed to update internal form title for {form_id}: {e}")
 
         # 1.a Explicitly publish the form to handle API changes (Forms created after June 30, 2026 default to unpublished)
-        try:
-            # Try to explicitly publish using the newly introduced methods
-            # using getattr to handle missing method during client library propagation
-            publish_method = getattr(self.forms.forms(), 'setPublishSettings', None)
-            if not publish_method:
-                 publish_method = getattr(self.forms.forms(), 'setPublishedSettings', None)
+        publish_method = getattr(self.forms.forms(), 'setPublishSettings', None)
+        if not publish_method:
+             publish_method = getattr(self.forms.forms(), 'setPublishedSettings', None)
 
-            if publish_method:
-                 publish_method(
-                     formId=form_id, 
-                     body={
-                         "publishSettings": {
-                             "publishState": {
-                                 "isPublished": True
-                             }
-                         },
-                         "updateMask": "publishState"
-                     }
-                 ).execute()
-            else:
-                 print(f"Notice: Explicit publishing methods 'setPublishSettings'/'setPublishedSettings' not found on current google client for form {form_id}.")
-        except Exception as e:
-             print(f"Warning: Failed to explicitly publish form {form_id}: {e}")
+        if publish_method:
+             publish_method(
+                 formId=form_id, 
+                 body={
+                     "publishSettings": {
+                         "publishState": {
+                             "isPublished": True,
+                             "isAcceptingResponses": True
+                         }
+                     },
+                     "updateMask": "publishState"
+                 }
+             ).execute()
+        else:
+             raise RuntimeError(f"Cannot publish form {form_id}: 'setPublishSettings' method not available on current google-api-python-client.")
 
         # 1.b Share with responders (allow anyone with the link to respond)
-
-        try:
-            self.drive.permissions().create(
-                fileId=form_id,
-                body={
-                    'type': 'anyone',
-                    'role': 'reader'
-                }
-            ).execute()
-        except Exception as e:
-            print(f"Warning: Failed to set 'anyone' reader permission on form {form_id}: {e}")
+        self.drive.permissions().create(
+            fileId=form_id,
+            body={
+                'type': 'anyone',
+                'role': 'reader'
+            }
+        ).execute()
 
         self._apply_form_settings_via_script(form_id)
 
