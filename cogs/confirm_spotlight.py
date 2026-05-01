@@ -124,9 +124,7 @@ class FinalConfirmView(discord.ui.View):
             self.db.save_spotlight_roster(self.cycle_number, self.roster)
 
         except Exception as e:
-            import traceback
-            print(f"!!! Error in button callback: {e}")
-            traceback.print_exc() 
+            logger.error(f"Error in confirm-spotlight button callback: {e}", exc_info=True)
             status_lines.append(f"\n⚠️ Error creating forms or saving roster: {e}")
 
         # 4. Generate Feedback Thread + Update Status

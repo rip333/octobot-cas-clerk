@@ -65,12 +65,11 @@ class StartCycleModal(discord.ui.Modal, title='Start Cycle'):
             f"Hey {role_mention}!\n\n"
             f"Welcome to Cycle {chosen_cycle}! "
             f"This thread will be used for nominations and voting for Cycle {chosen_cycle}!\n\n"
-            "**Rules**\n"
-            "NOMINATIONS:\n\nYou may nominate 2 Hero sets and 1 Encounter (villain or leader) set.\n\n"
+            "-- NOMINATIONS: --\n\nYou may nominate 2 Hero sets and 1 Encounter (villain or leader) set.\n\n"
             "Please include \"hero\" or \"encounter\" in your nomination to specify which type of set you are nominating.\n\n"
             "You may not nominate yourself.\n\n"
             f"{ineligible_section}"
-            "After nominations close (in about a week), we will close nominations and begin voting.\n\n"
+            "After nominations close, we will close nominations and begin voting.\n\n"
         )
 
         thread_name = f"Cycle {chosen_cycle} - Nominations and Voting"
@@ -86,7 +85,7 @@ class StartCycleModal(discord.ui.Modal, title='Start Cycle'):
         
         # Only update the DB and wipe the table if the Discord operations succeeded
         deleted_count = self.db.clear_nominations()
-        print(f"Deleted {deleted_count} nominations from table.")
+        logger.info(f"Cycle {chosen_cycle} start: cleared {deleted_count} nomination(s) from previous cycle.")
         
         self.db.begin_cycle(thread.id)
         self.bot.nomination_thread_id = thread.id

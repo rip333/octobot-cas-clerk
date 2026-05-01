@@ -17,7 +17,7 @@ class ConfirmSeals(commands.Cog):
 
     @app_commands.command(
         name="confirm-seals",
-        description="Admin: Evaluate all Spotlight forms, determine Seal pass/fail, and write sealed sets to the database."
+        description="Admin: Evaluate Spotlight forms, determine Seal pass/fail, and write results to the database."
     )
     @app_commands.default_permissions(manage_messages=True)
     async def confirm_seals(self, interaction: discord.Interaction):

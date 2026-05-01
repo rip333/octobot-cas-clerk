@@ -1,4 +1,5 @@
 import discord
+import asyncio
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -173,69 +174,175 @@ class VotingView(discord.ui.View):
         content = f"**✅ votes_submitted**"
         await interaction.response.edit_message(content=content, view=None)
 
+class ConfirmProceedView(discord.ui.View):
+    """Yes/No prompt shown when an automatic re-tally fails before opening voting."""
+    def __init__(self):
+        super().__init__(timeout=300)
+        self._decision: asyncio.Future = asyncio.get_event_loop().create_future()
+
+    @property
+    def decision(self) -> asyncio.Future:
+        return self._decision
+
+    def _disable_all(self):
+        for child in self.children:
+            child.disabled = True
+
+    @discord.ui.button(label="Yes, proceed with existing data", style=discord.ButtonStyle.success)
+    async def btn_proceed(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self._disable_all()
+        await interaction.response.edit_message(content="✅ Proceeding with existing nomination data…", view=self)
+        if not self._decision.done():
+            self._decision.set_result(True)
+
+    @discord.ui.button(label="No, abort", style=discord.ButtonStyle.danger)
+    async def btn_abort(self, interaction: discord.Interaction, button: discord.ui.Button):
+        self._disable_all()
+        await interaction.response.edit_message(content="❌ Aborted. No changes were made.", view=self)
+        if not self._decision.done():
+            self._decision.set_result(False)
+
+
 class Voting(commands.Cog):
     def __init__(self, bot):
         self.bot = bot
         self.db = MCPFirestore()
 
-    @app_commands.command(name="start-voting", description="Admin: Switch the active cycle to the voting phase and alert users.")
+    @app_commands.command(
+        name="end-nominations-start-vote",
+        description="Admin: Close nominations, verify tally is current, then open voting."
+    )
     @app_commands.default_permissions(manage_messages=True)
-    async def start_voting(self, interaction: discord.Interaction):
-        logger.info(f"Admin Action: start-voting initiated by {interaction.user.name} ({interaction.user.id})")
-        await interaction.response.defer(ephemeral=False)
-        
+    async def end_nominations_start_vote(self, interaction: discord.Interaction):
+        logger.info(f"Admin Action: end-nominations-start-vote initiated by {interaction.user.name} ({interaction.user.id})")
+        await interaction.response.defer(ephemeral=True)
+
         metadata = self.db.get_cycle_metadata()
         if metadata.get("state") != "nominations":
-            await interaction.followup.send("❌ **Invalid state.** This command can only be run during the `nominations` phase.", ephemeral=True)
+            await interaction.followup.send(
+                "❌ **Invalid state.** This command can only be run during the `nominations` phase.",
+                ephemeral=True,
+            )
             return
-            
+
         if not interaction.guild:
-            await interaction.followup.send("❌ **Invalid environment.** This command must be run within a server.", ephemeral=True)
+            await interaction.followup.send(
+                "❌ **Invalid environment.** This command must be run within a server.",
+                ephemeral=True,
+            )
             return
-        
-        # Build embed from current nominations
+
+        # ── Step 1: Check if the thread has new messages since the last tally ──
+        thread_id = metadata.get("nomination_thread_id", 0)
+        last_tallied = str(metadata.get("last_tallied_message_id", ""))
+
+        if thread_id:
+            try:
+                channel = await self.bot.fetch_channel(int(thread_id))
+                latest_id = None
+                async for msg in channel.history(limit=1):
+                    latest_id = str(msg.id)
+
+                if latest_id and latest_id != last_tallied:
+                    await interaction.followup.send(
+                        "🔄 New messages detected since the last `/tally-nominations`. Re-running AI tally now…",
+                        ephemeral=True,
+                    )
+                    from cogs.process_nominations import run_nomination_tally
+                    tally_result = await run_nomination_tally(self.bot, self.db)
+
+                    if not tally_result["success"]:
+                        view = ConfirmProceedView()
+                        await interaction.followup.send(
+                            f"⚠️ **Re-tally failed:** {tally_result['error']}\n\n"
+                            "Proceed with the existing nomination data anyway?",
+                            view=view,
+                            ephemeral=True,
+                        )
+                        proceed = await view.decision
+                        if not proceed:
+                            await interaction.followup.send("❌ Aborted. No changes were made.", ephemeral=True)
+                            return
+                    else:
+                        await interaction.followup.send(
+                            f"✅ Re-tally complete — **{tally_result['added_count']}** nomination(s) saved.",
+                            ephemeral=True,
+                        )
+                else:
+                    await interaction.followup.send(
+                        "✅ Nomination thread is up to date with the last tally.",
+                        ephemeral=True,
+                    )
+
+            except Exception as e:
+                logger.error(f"end-nominations-start-vote: thread check failed: {e}")
+                view = ConfirmProceedView()
+                await interaction.followup.send(
+                    f"⚠️ **Could not check thread for new messages:** {e}\n\n"
+                    "Proceed with the existing nomination data anyway?",
+                    view=view,
+                    ephemeral=True,
+                )
+                proceed = await view.decision
+                if not proceed:
+                    await interaction.followup.send("❌ Aborted. No changes were made.", ephemeral=True)
+                    return
+
+        # ── Step 2: Preview nominations and ask admin to confirm ──
         results = self.db.get_nominations()
-        
+
         heroes = set()
         encounters = set()
-        
+
         for data in results:
             category = data.get('category', '').lower()
             set_name = data.get('set_name', data.get('nomineeName', 'Unknown'))
             creator_name = data.get('creatorName', '')
-            
             display_name = f"{set_name} — {creator_name}" if creator_name else set_name
-            
             if category == 'hero':
                 heroes.add(display_name)
             elif category == 'encounter':
                 encounters.add(display_name)
 
-        # Sort alphabetically
-        heroes = sorted(list(heroes))
-        encounters = sorted(list(encounters))
+        heroes = sorted(heroes)
+        encounters = sorted(encounters)
 
         embed = discord.Embed(title="Final Nominations", color=discord.Color.blue())
-        
-        hero_text = "\n".join(f"- {name}" for name in heroes) if heroes else "No hero nominations."
-        embed.add_field(name="Heroes", value=hero_text, inline=False)
-        
-        encounter_text = "\n".join(f"- {name}" for name in encounters) if encounters else "No encounter nominations."
-        embed.add_field(name="Encounters", value=encounter_text, inline=False)
-        
+        embed.add_field(
+            name="Heroes",
+            value="\n".join(f"- {n}" for n in heroes) if heroes else "No hero nominations.",
+            inline=False,
+        )
+        embed.add_field(
+            name="Encounters",
+            value="\n".join(f"- {n}" for n in encounters) if encounters else "No encounter nominations.",
+            inline=False,
+        )
+
+        confirm_view = ConfirmProceedView()
+        await interaction.followup.send(
+            "**📋 Review the final nominations below.**\n\n"
+            "Confirming will **close nominations and open voting** publicly. This cannot be undone.",
+            embed=embed,
+            view=confirm_view,
+            ephemeral=True,
+        )
+        proceed = await confirm_view.decision
+        if not proceed:
+            await interaction.followup.send("❌ Aborted. Nominations remain open.", ephemeral=True)
+            return
+
+        # ── Step 3: Send public announcement and transition state ──
         role = discord.utils.get(interaction.guild.roles, name="Community Seal Updates")
         role_mention = role.mention if role else "@Community Seal Updates"
-        
+
         await interaction.followup.send(
             f"{role_mention} **📢 Nominations are now closed! Voting is now open!**\n\n"
             "Use the `/vote` command to cast your ballot. You may vote for up to 10 Heroes and 3 Encounters.",
-            embed=embed
+            embed=embed,
+            ephemeral=False,
         )
-        
-        # Only clear votes and update state if the message successfully sends
-        deleted_count = self.db.clear_votes()
-        print(f"Deleted {deleted_count} votes from table.")
-        
+
         metadata["state"] = "voting"
         self.db.update_cycle_metadata(metadata)
         self.bot.nomination_state = "voting"
