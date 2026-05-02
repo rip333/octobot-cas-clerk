@@ -42,7 +42,8 @@ async def test_start_cycle_invalid_state(mock_bot, mock_db, mock_interaction):
         cog = CycleManagement(mock_bot)
         
         # Access the underlying callback function
-        await cog.start_cycle.callback(cog, mock_interaction)
+        choice = discord.app_commands.Choice(name="Standard", value="standard")
+        await cog.start_cycle.callback(cog, mock_interaction, cycle_type=choice)
         
         mock_interaction.response.send_message.assert_called_once()
         args, kwargs = mock_interaction.response.send_message.call_args
@@ -59,7 +60,8 @@ async def test_start_cycle_invalid_channel(mock_bot, mock_db, mock_interaction):
     with patch('cogs.cycle_management.MCPFirestore', return_value=mock_db):
         cog = CycleManagement(mock_bot)
         
-        await cog.start_cycle.callback(cog, mock_interaction)
+        choice = discord.app_commands.Choice(name="Standard", value="standard")
+        await cog.start_cycle.callback(cog, mock_interaction, cycle_type=choice)
         
         mock_interaction.response.send_message.assert_called_once()
         args, kwargs = mock_interaction.response.send_message.call_args
@@ -72,7 +74,8 @@ async def test_start_cycle_success(mock_bot, mock_db, mock_interaction):
     with patch('cogs.cycle_management.MCPFirestore', return_value=mock_db):
         cog = CycleManagement(mock_bot)
         
-        await cog.start_cycle.callback(cog, mock_interaction)
+        choice = discord.app_commands.Choice(name="Standard", value="standard")
+        await cog.start_cycle.callback(cog, mock_interaction, cycle_type=choice)
         
         mock_interaction.response.send_message.assert_not_called()
         mock_interaction.response.send_modal.assert_called_once()
@@ -82,3 +85,4 @@ async def test_start_cycle_success(mock_bot, mock_db, mock_interaction):
         modal = args[0]
         assert isinstance(modal, StartCycleModal)
         assert modal.default_cycle_num == 12
+        assert modal.cycle_type == "standard"
