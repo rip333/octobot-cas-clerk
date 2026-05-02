@@ -2,6 +2,9 @@ import discord
 from discord.ext import commands
 from discord import app_commands
 from mcp_firestore import MCPFirestore
+import logging
+
+logger = logging.getLogger('octobot')
 
 class AssignIPView(discord.ui.View):
     def __init__(self, db, candidates, cycle_number, interaction: discord.Interaction):
@@ -83,54 +86,40 @@ class AssignIP(commands.Cog):
         self.bot = bot
         self.db = MCPFirestore()
 
-    @app_commands.command(name="assign-ip", description="Admin: Label the IP (Marvel, DC, Other) for every voted candidate.")
+    @app_commands.command(name="assign-ip", description="Admin: Label the IP (Marvel, DC, Other) for every nominated candidate.")
     @app_commands.default_permissions(manage_messages=True)
     async def assign_ip_cmd(self, interaction: discord.Interaction):
+        logger.info(f"Admin Action: assign-ip initiated by {interaction.user.name} ({interaction.user.id})")
         await interaction.response.defer(ephemeral=True)
         
         metadata = self.db.get_cycle_metadata()
         if metadata.get("state") != "voting":
             await interaction.followup.send("❌ **Invalid state.** This command can only be run during the `voting` phase.", ephemeral=True)
             return
+            
+        if metadata.get("type") == "redemption":
+            await interaction.followup.send("✅ **Not needed.** Redemption cycles do not require IP categorization.", ephemeral=True)
+            return
         
         cycle_number = metadata.get("number", 0)
         
-        # Get all voted candidates
-        results = self.db.get_all_votes()
+        # Get all candidates from nominations
         noms = self.db.get_nominations()
         
-        nom_map = {}
         nom_ips = {}
         for data in noms:
             set_name = data.get('set_name', data.get('nomineeName', 'Unknown'))
-            nom_map[set_name] = set_name
             # Gather LLM AI Guessed IPs
             ip_cat = data.get('ip_category')
             if ip_cat and ip_cat in ["Marvel", "DC", "Other"]:
                 nom_ips[set_name] = ip_cat
             
         unique_candidates = set()
-        for data in results:
-            for hero_obj in data.get('heroes', []):
-                if isinstance(hero_obj, dict):
-                    set_name = hero_obj.get('set_name', hero_obj.get('nomineeName', 'Unknown'))
-                else:
-                    set_name = hero_obj.split(' — ')[0]
-                disp = nom_map.get(set_name, set_name)
-                
-                # If the AI did not automatically successfully guess the IP, add to candidates
-                if disp not in nom_ips:
-                    unique_candidates.add(disp)
-                    
-            for encounter_obj in data.get('encounters', []):
-                if isinstance(encounter_obj, dict):
-                    set_name = encounter_obj.get('set_name', encounter_obj.get('nomineeName', 'Unknown'))
-                else:
-                    set_name = encounter_obj.split(' — ')[0]
-                disp = nom_map.get(set_name, set_name)
-                
-                if disp not in nom_ips:
-                    unique_candidates.add(disp)
+        for data in noms:
+            set_name = data.get('set_name', data.get('nomineeName', 'Unknown'))
+            # If the AI did not automatically successfully guess the IP, add to candidates
+            if set_name not in nom_ips:
+                unique_candidates.add(set_name)
                 
         # Sorted candidate list that strips out the already successfully guessed sets 
         candidates = sorted(list(unique_candidates))

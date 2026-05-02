@@ -4,6 +4,9 @@ from discord import app_commands
 import asyncio
 from mcp_firestore import MCPFirestore
 from google_services import GoogleServices
+import logging
+
+logger = logging.getLogger('octobot')
 
 def build_roster_embed(roster: list, title: str) -> discord.Embed:
     embed = discord.Embed(title=title, color=discord.Color.green())
@@ -11,7 +14,9 @@ def build_roster_embed(roster: list, title: str) -> discord.Embed:
     def format_entry(entry):
         base = f"- {entry['set_name']}"
         if entry.get('response_url'):
-            base = f"{base} — [Form Link]({entry['response_url']})"
+            base = f"{base} — [Form]({entry['response_url']})"
+            if entry.get('analytics_url'):
+                base = f"{base} | [Results]({entry['analytics_url']})"
         return base
         
     marvel_heroes = [format_entry(h) for h in roster if h['category'] == 'Marvel']
@@ -67,10 +72,11 @@ class TiebreakerView(discord.ui.View):
 
 
 class FinalConfirmView(discord.ui.View):
-    def __init__(self, db, cycle_number, roster, original_interaction):
+    def __init__(self, db, cycle_number, cycle_type, roster, original_interaction):
         super().__init__(timeout=None)
         self.db = db
         self.cycle_number = cycle_number
+        self.cycle_type = cycle_type
         self.roster = roster
         self.original_interaction = original_interaction
 
@@ -92,31 +98,44 @@ class FinalConfirmView(discord.ui.View):
             gs = GoogleServices()
 
             status_lines.append("**Scorecard Forms:**\n")
+            failed_forms = []
             for entry in self.roster:
                 try:
                     creator_name = entry.get("creatorName", "Unknown")
-                    form_result = gs.copy_form_for_set(entry["set_name"], self.cycle_number, creator_name)
+                    form_result = await asyncio.to_thread(
+                        gs.copy_form_for_set,
+                        entry["set_name"],
+                        self.cycle_number,
+                        creator_name
+                    )
                     
                     entry["form_id"] = form_result["form_id"]
                     entry["title"] = form_result["title"]
                     entry["edit_url"] = form_result["edit_url"]
                     entry["response_url"] = form_result["response_url"]
+                    entry["analytics_url"] = form_result["analytics_url"]
                     
                     status_lines.append(
                         f"- **{entry['set_name']}** ({entry['category']}):\n"
-                        f"  [Form]({form_result['response_url']})\n"
+                        f"  [Form]({form_result['response_url']}) | [Results]({form_result['analytics_url']})\n"
                     )
                 except Exception as form_err:
-                    status_lines.append(f"- ⚠️ **{entry['set_name']}**: Form creation failed — {form_err}\n")
+                    failed_forms.append(entry['set_name'])
+                    status_lines.append(f"- ❌ **{entry['set_name']}**: Form creation failed — {form_err}\n")
+
+            if failed_forms:
+                status_lines.insert(0, f"**❌ Aborted — {len(failed_forms)} form(s) failed to create/publish. Cycle state was NOT changed.**\n\n")
+                form_output_block = "".join(status_lines)
+                await interaction.edit_original_response(content=form_output_block, view=self)
+                return
 
             # 2. Save the final roster containing all form data into the single Firestore source of truth.
             self.db.save_spotlight_roster(self.cycle_number, self.roster)
 
         except Exception as e:
-            import traceback
-            print(f"!!! Error in button callback: {e}")
-            traceback.print_exc() 
-            status_lines.append(f"\n⚠️ Error creating forms or saving roster: {e}")
+            logger.error(f"Error in confirm-spotlight button callback: {e}", exc_info=True)
+            await interaction.edit_original_response(content=f"**❌ Aborted — unexpected error: {e}**\nCycle state was NOT changed.", view=self)
+            return
 
         # 4. Generate Feedback Thread + Update Status
         form_output_block = "".join(status_lines)
@@ -125,16 +144,21 @@ class FinalConfirmView(discord.ui.View):
         try:
             # Create Thread
             thread_name = f"Cycle {self.cycle_number} - Scorecards"
-            channel = interaction.channel
-            if isinstance(channel, discord.TextChannel) or isinstance(channel, discord.ForumChannel):
-                thread = await channel.create_thread(
+            
+            parent_channel = interaction.channel
+            if isinstance(parent_channel, discord.Thread):
+                parent_channel = parent_channel.parent
+
+            if isinstance(parent_channel, (discord.TextChannel, discord.ForumChannel)):
+                thread = await parent_channel.create_thread(
                     name=thread_name,
                     type=discord.ChannelType.public_thread,
                     auto_archive_duration=10080
                 )
                 
                 from datetime import datetime, timedelta
-                end_date = datetime.now() + timedelta(weeks=6)
+                duration_weeks = 4 if self.cycle_type == "redemption" else 6
+                end_date = datetime.now() + timedelta(weeks=duration_weeks)
                 end_date = end_date.replace(hour=0, minute=0, second=0, microsecond=0)
                 end_ts = int(end_date.timestamp())
 
@@ -145,8 +169,10 @@ class FinalConfirmView(discord.ui.View):
                 )
                 roster_embed = build_roster_embed(self.roster, f"Cycle {self.cycle_number} Scorecards")
                 await thread.send(welcome_msg, embed=roster_embed)
+            else:
+                await interaction.followup.send("⚠️ Could not create Scorecards thread: Command not run in a valid channel.", ephemeral=True)
 
-                self.db.end_cycle()
+            self.db.update_cycle(self.cycle_number, {"state": "review"})
                 
         except Exception as e:
             await interaction.followup.send(f"⚠️ Error: {e}", ephemeral=True)
@@ -175,14 +201,24 @@ class ConfirmSpotlight(commands.Cog):
     @app_commands.command(name="confirm-spotlight", description="Admin: Run the spotlight logic, resolve ties, and save the final roster.")
     @app_commands.default_permissions(manage_messages=True)
     async def confirm_spotlight(self, interaction: discord.Interaction):
+        logger.info(f"Admin Action: confirm-spotlight initiated by {interaction.user.name} ({interaction.user.id})")
         await interaction.response.defer(ephemeral=True)
         
         metadata = self.db.get_cycle_metadata()
         if metadata.get("state") != "voting":
             await interaction.followup.send("❌ **Invalid state.** This command can only be run during the `voting` phase.", ephemeral=True)
             return
+            
+        parent_channel = interaction.channel
+        if isinstance(parent_channel, discord.Thread):
+            parent_channel = parent_channel.parent
+
+        if not isinstance(parent_channel, (discord.TextChannel, discord.ForumChannel)):
+            await interaction.followup.send("❌ **Invalid channel.** This command must be run in a text or forum channel (or a thread within one) so the bot can create the Scorecards thread.", ephemeral=True)
+            return
         
         cycle_number = metadata.get("number", 0)
+        cycle_type = metadata.get("type", "standard")
         
         results = self.db.get_all_votes()
         noms = self.db.get_nominations()
@@ -328,51 +364,52 @@ class ConfirmSpotlight(commands.Cog):
             final_roster.append(format_hero_data(e['name'], "Encounter"))
 
         # STEP 3: Heroes (Quotas)
-        quotas = {"Marvel": 2, "DC": 2, "Other": 2}
         pool = clean_heroes[:]
         
-        for quota_cat, limit in quotas.items():
-            cat_winners = []
-            candidates = []
-            for h in pool:
-                ip = ip_cache.get(h['name'], "Other")
-                if ip == quota_cat:
-                    candidates.append(h)
+        if cycle_type != "redemption":
+            quotas = {"Marvel": 2, "DC": 2, "Other": 2}
+            for quota_cat, limit in quotas.items():
+                cat_winners = []
+                candidates = []
+                for h in pool:
+                    ip = ip_cache.get(h['name'], "Other")
+                    if ip == quota_cat:
+                        candidates.append(h)
+                        
+                if not candidates:
+                    continue
                     
-            if not candidates:
-                continue
-                
-            current_idx = 0
-            while len(cat_winners) < limit and current_idx < len(candidates):
-                current_votes = candidates[current_idx]['count']
-                tied = [c for c in candidates[current_idx:] if c['count'] == current_votes]
-                remaining_slots = limit - len(cat_winners)
-                
-                if len(tied) <= remaining_slots:
-                    for t in tied:
-                        cat_winners.append(t)
-                        pool.remove(t)
-                    current_idx += len(tied)
-                else:
-                    options = [t['name'] for t in tied]
-                    res = await self.resolve_tie(
-                        interaction,
-                        f"Hero Quota Tiebreaker: {quota_cat}",
-                        f"There are {remaining_slots} {quota_cat} slot(s) left, but {len(tied)} candidates are tied at {current_votes} votes.",
-                        options,
-                        remaining_slots
-                    )
-                    for r in res:
-                        winner = next(t for t in tied if t['name'] == r)
-                        cat_winners.append(winner)
-                        pool.remove(winner)
-                    break 
+                current_idx = 0
+                while len(cat_winners) < limit and current_idx < len(candidates):
+                    current_votes = candidates[current_idx]['count']
+                    tied = [c for c in candidates[current_idx:] if c['count'] == current_votes]
+                    remaining_slots = limit - len(cat_winners)
+                    
+                    if len(tied) <= remaining_slots:
+                        for t in tied:
+                            cat_winners.append(t)
+                            pool.remove(t)
+                        current_idx += len(tied)
+                    else:
+                        options = [t['name'] for t in tied]
+                        res = await self.resolve_tie(
+                            interaction,
+                            f"Hero Quota Tiebreaker: {quota_cat}",
+                            f"There are {remaining_slots} {quota_cat} slot(s) left, but {len(tied)} candidates are tied at {current_votes} votes.",
+                            options,
+                            remaining_slots
+                        )
+                        for r in res:
+                            winner = next(t for t in tied if t['name'] == r)
+                            cat_winners.append(winner)
+                            pool.remove(winner)
+                        break 
 
-            for h in cat_winners:
-                final_roster.append(format_hero_data(h['name'], quota_cat))
+                for h in cat_winners:
+                    final_roster.append(format_hero_data(h['name'], quota_cat))
 
         # STEP 4: Wildcards
-        wildcard_slots = 2
+        wildcard_slots = 4 if cycle_type == "redemption" else 2
         wildcard_winners = []
         
         current_idx = 0
@@ -404,7 +441,7 @@ class ConfirmSpotlight(commands.Cog):
         # STEP 5: Final Confirmation
         embed = build_roster_embed(final_roster, "Final Spotlight Roster Preview")
         
-        view = FinalConfirmView(self.db, cycle_number, final_roster, interaction)
+        view = FinalConfirmView(self.db, cycle_number, cycle_type, final_roster, interaction)
         await interaction.followup.send("Please verify the roster below and confirm to save to the database:", embed=embed, view=view, ephemeral=True)
 
 
