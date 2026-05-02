@@ -32,8 +32,22 @@ async def run_nomination_tally(bot, db) -> dict:
     except Exception as e:
         return {"success": False, "error": f"Could not fetch thread: {e}"}
 
+    from cycle_rules import get_rule_for_type
+
     rules_text = db.get_rules()
-    hero_creators, encounter_creators = db.get_ineligible_creators(current_cycle_number)
+    cycle_type = metadata.get("type", "standard")
+    rule = get_rule_for_type(cycle_type)
+    
+    context = {
+        "rules_text": rules_text
+    }
+    
+    if cycle_type == "redemption":
+        context["eligible_sets"] = db.get_unsealed_spotlights()
+    else:
+        hero_creators, encounter_creators = db.get_ineligible_creators(current_cycle_number)
+        context["hero_creators"] = hero_creators
+        context["encounter_creators"] = encounter_creators
 
     # Build thread history and track the channel's latest message ID as checkpoint.
     # We save the channel's last_message_id (not just the last non-bot message we
@@ -59,9 +73,8 @@ async def run_nomination_tally(bot, db) -> dict:
             None,
             agent.process_thread,
             history_str,
-            rules_text,
-            hero_creators,
-            encounter_creators,
+            rule,
+            context,
         )
     except Exception as e:
         logger.error(f"run_nomination_tally: Gemini processing failed: {e}")

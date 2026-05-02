@@ -8,12 +8,13 @@ import logging
 logger = logging.getLogger('octobot')
 
 class StartCycleModal(discord.ui.Modal, title='Start Cycle'):
-    def __init__(self, db, bot, default_cycle_num, default_next_num, channel):
+    def __init__(self, db, bot, default_cycle_num, default_next_num, channel, cycle_type: str):
         super().__init__()
         self.db = db
         self.bot = bot
         self.channel = channel
         self.default_cycle_num = default_cycle_num
+        self.cycle_type = cycle_type
         
         self.cycle_number = discord.ui.TextInput(
             label='Cycle Number',
@@ -45,6 +46,7 @@ class StartCycleModal(discord.ui.Modal, title='Start Cycle'):
             "state": "planning",
             "is_active": True,
             "nomination_thread_id": 0,
+            "type": self.cycle_type,
         }
         self.db.db.collection(self.db.collection_prefix + 'cycles').document(str(chosen_cycle)).set(default_cycle)
 
@@ -71,10 +73,16 @@ class StartCycleModal(discord.ui.Modal, title='Start Cycle'):
             f"This thread will be used for nominations and voting for Cycle {chosen_cycle}!\n\n"
             "-- NOMINATIONS: --\n\nYou may nominate 2 Hero sets and 1 Encounter (villain or leader) set.\n\n"
             "Please include \"hero\" or \"encounter\" in your nomination to specify which type of set you are nominating.\n\n"
-            "You may not nominate yourself.\n\n"
-            f"{ineligible_section}"
-            "After nominations close, we will close nominations and begin voting.\n\n"
         )
+        
+        if self.cycle_type == "redemption":
+            intro_text += "**This is a Redemption Cycle!** Only sets that have been previously spotlighted but NOT sealed are eligible.\n"
+            intro_text += "You MAY nominate your own set.\n\n"
+        else:
+            intro_text += "You may not nominate yourself.\n\n"
+            
+        intro_text += f"{ineligible_section}"
+        intro_text += "After nominations close, we will close nominations and begin voting.\n\n"
 
         thread_name = f"Cycle {chosen_cycle} - Nominations and Voting"
 
@@ -104,9 +112,13 @@ class CycleManagement(commands.Cog):
         self.db = MCPFirestore()
 
     @app_commands.command(name="start-cycle", description="Start a new CAS cycle and create the nominations thread.")
+    @app_commands.choices(cycle_type=[
+        app_commands.Choice(name="Standard", value="standard"),
+        app_commands.Choice(name="Redemption", value="redemption"),
+    ])
     @app_commands.default_permissions(manage_channels=True)
-    async def start_cycle(self, interaction: discord.Interaction):
-        logger.info(f"Admin Action: start-cycle initiated by {interaction.user.name} ({interaction.user.id})")
+    async def start_cycle(self, interaction: discord.Interaction, cycle_type: app_commands.Choice[str]):
+        logger.info(f"Admin Action: start-cycle initiated by {interaction.user.name} ({interaction.user.id}) with type: {cycle_type.value}")
         
         # We must NOT defer here if we intend to show a modal
         metadata = self.db.get_cycle_metadata()
@@ -124,7 +136,7 @@ class CycleManagement(commands.Cog):
         current_cycle_number = int(metadata.get("number"))
         next_cycle_number = current_cycle_number + 1
         
-        modal = StartCycleModal(self.db, self.bot, current_cycle_number, next_cycle_number, channel)
+        modal = StartCycleModal(self.db, self.bot, current_cycle_number, next_cycle_number, channel, cycle_type.value)
         await interaction.response.send_modal(modal)
         
 async def setup(bot):

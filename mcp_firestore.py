@@ -32,6 +32,7 @@ class MCPFirestore:
             "state": "planning",
             "is_active": True,
             "nomination_thread_id": 0,
+            "type": "standard",
         }
         self.db.collection(self.collection_prefix + 'cycles').document(str(cycle_num)).set(default_cycle)
         return default_cycle
@@ -82,6 +83,7 @@ class MCPFirestore:
             "state": "planning",
             "is_active": True,
             "nomination_thread_id": 0,
+            "type": "standard",
         })
         return True
 
@@ -262,6 +264,27 @@ class MCPFirestore:
         docs = self._spotlights_ref(cycle_number).stream()
         spotlights = [doc.to_dict() for doc in docs]
         return {'cycle': cycle_number, 'spotlights': spotlights}
+
+    def get_unsealed_spotlights(self) -> list:
+        sealed_names = set()
+        sealed_docs = self.db.collection(self.collection_prefix + 'sealed_sets').stream()
+        for doc in sealed_docs:
+            data = doc.to_dict()
+            name = data.get('set_name')
+            if name:
+                sealed_names.add(name.lower().strip())
+                
+        all_cycles = self.get_all_cycles()
+        unsealed = []
+        for c in all_cycles:
+            roster = self.get_spotlight_roster(c)
+            for spot in roster.get('spotlights', []):
+                name = spot.get('set_name')
+                if name and name.lower().strip() not in sealed_names:
+                    # Add to sealed_names to avoid returning duplicates if spotlighted multiple times
+                    sealed_names.add(name.lower().strip())
+                    unsealed.append(name)
+        return unsealed
 
     def get_ineligible_creators(self, cycle_number: int) -> tuple[list, list]:
         previous_cycle = cycle_number - 1

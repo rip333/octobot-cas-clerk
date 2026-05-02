@@ -96,6 +96,10 @@ class AssignIP(commands.Cog):
         if metadata.get("state") != "voting":
             await interaction.followup.send("❌ **Invalid state.** This command can only be run during the `voting` phase.", ephemeral=True)
             return
+            
+        if metadata.get("type") == "redemption":
+            await interaction.followup.send("✅ **Not needed.** Redemption cycles do not require IP categorization.", ephemeral=True)
+            return
         
         cycle_number = metadata.get("number", 0)
         

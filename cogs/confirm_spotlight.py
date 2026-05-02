@@ -72,10 +72,11 @@ class TiebreakerView(discord.ui.View):
 
 
 class FinalConfirmView(discord.ui.View):
-    def __init__(self, db, cycle_number, roster, original_interaction):
+    def __init__(self, db, cycle_number, cycle_type, roster, original_interaction):
         super().__init__(timeout=None)
         self.db = db
         self.cycle_number = cycle_number
+        self.cycle_type = cycle_type
         self.roster = roster
         self.original_interaction = original_interaction
 
@@ -156,7 +157,8 @@ class FinalConfirmView(discord.ui.View):
                 )
                 
                 from datetime import datetime, timedelta
-                end_date = datetime.now() + timedelta(weeks=6)
+                duration_weeks = 4 if self.cycle_type == "redemption" else 6
+                end_date = datetime.now() + timedelta(weeks=duration_weeks)
                 end_date = end_date.replace(hour=0, minute=0, second=0, microsecond=0)
                 end_ts = int(end_date.timestamp())
 
@@ -216,6 +218,7 @@ class ConfirmSpotlight(commands.Cog):
             return
         
         cycle_number = metadata.get("number", 0)
+        cycle_type = metadata.get("type", "standard")
         
         results = self.db.get_all_votes()
         noms = self.db.get_nominations()
@@ -361,51 +364,52 @@ class ConfirmSpotlight(commands.Cog):
             final_roster.append(format_hero_data(e['name'], "Encounter"))
 
         # STEP 3: Heroes (Quotas)
-        quotas = {"Marvel": 2, "DC": 2, "Other": 2}
         pool = clean_heroes[:]
         
-        for quota_cat, limit in quotas.items():
-            cat_winners = []
-            candidates = []
-            for h in pool:
-                ip = ip_cache.get(h['name'], "Other")
-                if ip == quota_cat:
-                    candidates.append(h)
+        if cycle_type != "redemption":
+            quotas = {"Marvel": 2, "DC": 2, "Other": 2}
+            for quota_cat, limit in quotas.items():
+                cat_winners = []
+                candidates = []
+                for h in pool:
+                    ip = ip_cache.get(h['name'], "Other")
+                    if ip == quota_cat:
+                        candidates.append(h)
+                        
+                if not candidates:
+                    continue
                     
-            if not candidates:
-                continue
-                
-            current_idx = 0
-            while len(cat_winners) < limit and current_idx < len(candidates):
-                current_votes = candidates[current_idx]['count']
-                tied = [c for c in candidates[current_idx:] if c['count'] == current_votes]
-                remaining_slots = limit - len(cat_winners)
-                
-                if len(tied) <= remaining_slots:
-                    for t in tied:
-                        cat_winners.append(t)
-                        pool.remove(t)
-                    current_idx += len(tied)
-                else:
-                    options = [t['name'] for t in tied]
-                    res = await self.resolve_tie(
-                        interaction,
-                        f"Hero Quota Tiebreaker: {quota_cat}",
-                        f"There are {remaining_slots} {quota_cat} slot(s) left, but {len(tied)} candidates are tied at {current_votes} votes.",
-                        options,
-                        remaining_slots
-                    )
-                    for r in res:
-                        winner = next(t for t in tied if t['name'] == r)
-                        cat_winners.append(winner)
-                        pool.remove(winner)
-                    break 
+                current_idx = 0
+                while len(cat_winners) < limit and current_idx < len(candidates):
+                    current_votes = candidates[current_idx]['count']
+                    tied = [c for c in candidates[current_idx:] if c['count'] == current_votes]
+                    remaining_slots = limit - len(cat_winners)
+                    
+                    if len(tied) <= remaining_slots:
+                        for t in tied:
+                            cat_winners.append(t)
+                            pool.remove(t)
+                        current_idx += len(tied)
+                    else:
+                        options = [t['name'] for t in tied]
+                        res = await self.resolve_tie(
+                            interaction,
+                            f"Hero Quota Tiebreaker: {quota_cat}",
+                            f"There are {remaining_slots} {quota_cat} slot(s) left, but {len(tied)} candidates are tied at {current_votes} votes.",
+                            options,
+                            remaining_slots
+                        )
+                        for r in res:
+                            winner = next(t for t in tied if t['name'] == r)
+                            cat_winners.append(winner)
+                            pool.remove(winner)
+                        break 
 
-            for h in cat_winners:
-                final_roster.append(format_hero_data(h['name'], quota_cat))
+                for h in cat_winners:
+                    final_roster.append(format_hero_data(h['name'], quota_cat))
 
         # STEP 4: Wildcards
-        wildcard_slots = 2
+        wildcard_slots = 4 if cycle_type == "redemption" else 2
         wildcard_winners = []
         
         current_idx = 0
@@ -437,7 +441,7 @@ class ConfirmSpotlight(commands.Cog):
         # STEP 5: Final Confirmation
         embed = build_roster_embed(final_roster, "Final Spotlight Roster Preview")
         
-        view = FinalConfirmView(self.db, cycle_number, final_roster, interaction)
+        view = FinalConfirmView(self.db, cycle_number, cycle_type, final_roster, interaction)
         await interaction.followup.send("Please verify the roster below and confirm to save to the database:", embed=embed, view=view, ephemeral=True)
 
 
