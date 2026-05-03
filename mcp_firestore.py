@@ -96,15 +96,9 @@ class MCPFirestore:
         for doc in docs:
             data = doc.to_dict()
             for s in data.get('sets', []):
-                nom = {
-                    'nominatorId': data.get('nominator_id'),
-                    'nominatorName': data.get('nominator_name'),
-                    'set_name': s.get('set_name'),
-                    'category': s.get('category'),
-                    'creatorName': s.get('creatorName'),
-                    'ip_category': s.get('ip_category'),
-                    'type': s.get('type')
-                }
+                nom = s.copy()
+                nom['nominatorId'] = data.get('nominator_id')
+                nom['nominatorName'] = data.get('nominator_name')
                 nominations.append(nom)
         return nominations
 
@@ -235,6 +229,23 @@ class MCPFirestore:
             logger.info(f"copy_to_sealed_sets: Queued '{item_data.get('set_name', 'UNKNOWN')}' -> {doc_ref.path}")
         batch.commit()
         logger.info(f"copy_to_sealed_sets: Batch committed successfully.")
+        return True
+
+    def get_all_sealed_sets(self) -> list:
+        """Return all documents from the sealed_sets collection, each including its doc ID."""
+        docs = self.db.collection(self.collection_prefix + 'sealed_sets').stream()
+        result = []
+        for doc in docs:
+            data = doc.to_dict()
+            data['_doc_id'] = doc.id
+            result.append(data)
+        return result
+
+    def update_sealed_set_drive_link(self, doc_id: str, drive_link: str) -> bool:
+        """Update the google_drive field on a specific sealed_sets document."""
+        self.db.collection(self.collection_prefix + 'sealed_sets').document(doc_id).update(
+            {"google_drive": drive_link}
+        )
         return True
 
     def save_ip_assignment(self, cycle_number: int, set_name: str, ip_category: str) -> bool:

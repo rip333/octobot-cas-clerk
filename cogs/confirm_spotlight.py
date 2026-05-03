@@ -324,12 +324,13 @@ class ConfirmSpotlight(commands.Cog):
         final_roster = []
         
         def format_hero_data(name, category):
-            data = {"set_name": name, "category": category}
             nom = nom_map.get(name, {})
-            if nom.get('creatorName'):
-                data['creatorName'] = nom['creatorName']
-            if nom.get('creatorDiscordId'):
-                data['creatorDiscordId'] = nom['creatorDiscordId']
+            data = nom.copy()
+            data["set_name"] = name
+            data["category"] = category
+            # ensure creatorName is carried over properly
+            if not data.get("creatorName"):
+                data["creatorName"] = "Unknown"
             return data
 
         # STEP 2: Encounters

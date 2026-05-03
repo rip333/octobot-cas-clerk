@@ -106,8 +106,7 @@ async def run_nomination_tally(bot, db) -> dict:
             "category": cat,
             "creatorName": nom.get("creator_name", ""),
             "creatorDiscordId": nom.get("creator_discord_id", ""),
-            "ip_category": nom.get("ip_category", ""),
-            "type": "villain" if cat == "Encounter" else "hero",
+            "ip_category": nom.get("ip_category", "").upper(),
         })
 
     for user_id, user_data in noms_by_user.items():

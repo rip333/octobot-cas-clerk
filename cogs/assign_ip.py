@@ -47,7 +47,7 @@ class AssignIPView(discord.ui.View):
 
     @discord.ui.button(label="Marvel", style=discord.ButtonStyle.primary)
     async def btn_marvel(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.assign_ip(interaction, "Marvel")
+        await self.assign_ip(interaction, "MARVEL")
 
     @discord.ui.button(label="DC", style=discord.ButtonStyle.primary)
     async def btn_dc(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -55,7 +55,7 @@ class AssignIPView(discord.ui.View):
 
     @discord.ui.button(label="Other", style=discord.ButtonStyle.primary)
     async def btn_other(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await self.assign_ip(interaction, "Other")
+        await self.assign_ip(interaction, "OTHER")
 
     @discord.ui.button(label="Skip", style=discord.ButtonStyle.secondary, row=1)
     async def btn_skip(self, interaction: discord.Interaction, button: discord.ui.Button):
@@ -111,8 +111,8 @@ class AssignIP(commands.Cog):
             set_name = data.get('set_name', data.get('nomineeName', 'Unknown'))
             # Gather LLM AI Guessed IPs
             ip_cat = data.get('ip_category')
-            if ip_cat and ip_cat in ["Marvel", "DC", "Other"]:
-                nom_ips[set_name] = ip_cat
+            if ip_cat and ip_cat.upper() in ["MARVEL", "DC", "OTHER"]:
+                nom_ips[set_name] = ip_cat.upper()
             
         unique_candidates = set()
         for data in noms:

@@ -49,8 +49,8 @@ async def on_app_command_error(interaction: discord.Interaction, error: discord.
             await interaction.followup.send(error_msg, ephemeral=True)
         else:
             await interaction.response.send_message(error_msg, ephemeral=True)
-    except discord.errors.NotFound:
-        print("Interaction expired before error message could be sent.")
+    except (discord.errors.NotFound, discord.errors.HTTPException) as e:
+        print(f"Could not send error message to user: {e}")
 
 @client.event
 async def setup_hook():
@@ -63,6 +63,8 @@ async def setup_hook():
     await client.load_extension("cogs.process_nominations")
     await client.load_extension("cogs.confirm_seals")
     await client.load_extension("cogs.view_seal_progress")
+    await client.load_extension("cogs.view_seals")
+    await client.load_extension("cogs.set_seal_drive_link")
     await client.tree.sync()
     
     from mcp_firestore import MCPFirestore
@@ -88,7 +90,6 @@ async def on_guild_join(guild):
         print(f"Joined unauthorized guild: {guild.name} ({guild.id}). Leaving...")
         await guild.leave()
 
-@client.tree.interaction_check
 async def global_guild_check(interaction: discord.Interaction) -> bool:
     if not ALLOWED_GUILDS:
         return True
@@ -97,6 +98,8 @@ async def global_guild_check(interaction: discord.Interaction) -> bool:
     
     await interaction.response.send_message("This bot is not authorized to run on this server.", ephemeral=True)
     return False
+
+client.tree.interaction_check = global_guild_check
 
 import time
 

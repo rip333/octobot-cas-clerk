@@ -50,14 +50,15 @@ class ConfirmSeals(commands.Cog):
     )
     @app_commands.default_permissions(manage_messages=True)
     async def confirm_seals(self, interaction: discord.Interaction):
+        env_prefix = "[TEST] " if self.db.collection_prefix else ""
         logger.info(
-            f"Admin Action: confirm-seals initiated by "
+            f"{env_prefix}Admin Action: confirm-seals initiated by "
             f"{interaction.user.name} ({interaction.user.id})"
         )
         await interaction.response.defer(ephemeral=True)
 
         # --- state gate ---
-        metadata = self.db.get_cycle_metadata()
+        metadata = await asyncio.to_thread(self.db.get_cycle_metadata)
         if metadata.get("state") != "review":
             await interaction.followup.send(
                 "❌ **Invalid state.** This command can only be run during the `review` phase.",
@@ -68,7 +69,7 @@ class ConfirmSeals(commands.Cog):
         cycle_number = int(metadata.get("number", 0))
 
         # --- fetch roster ---
-        roster_data = self.db.get_spotlight_roster(cycle_number)
+        roster_data = await asyncio.to_thread(self.db.get_spotlight_roster, cycle_number)
         spotlights = roster_data.get("spotlights", [])
 
         if not spotlights:
@@ -89,14 +90,14 @@ class ConfirmSeals(commands.Cog):
             return
 
         await interaction.followup.send(
-            f"⏳ Fetching form responses for {len(sets_with_forms)} set(s). "
+            f"⏳ Fetching form responses for {len(sets_with_forms)} set(s) in **Cycle {cycle_number}**. "
             "This may take a moment…",
             ephemeral=True
         )
 
         # --- initialise Google Services ---
         try:
-            gs = GoogleServices()
+            gs = await asyncio.to_thread(GoogleServices)
         except Exception as e:
             await interaction.followup.send(
                 f"❌ Failed to initialise Google Services: {e}",
@@ -129,6 +130,12 @@ class ConfirmSeals(commands.Cog):
         sealed_results = [r for r in results if r["sealed"]]
         failed_results = [r for r in results if not r["sealed"]]
 
+        logger.info(f"{env_prefix}confirm-seals: Evaluated {len(results)} sets. {len(sealed_results)} sealed, {len(failed_results)} failed.")
+        if sealed_results:
+            logger.info(f"{env_prefix}confirm-seals: Sealed sets: {[r['set_name'] for r in sealed_results]}")
+        if failed_results:
+            logger.info(f"{env_prefix}confirm-seals: Failed sets: {[r['set_name'] for r in failed_results]}")
+
         summary_lines = [
             f"## 🏅 Cycle {cycle_number} — Seal Results Preview\n",
             f"**{len(sealed_results)} / {len(results)} set(s) would earn the Community Seal.**\n",
@@ -147,7 +154,7 @@ class ConfirmSeals(commands.Cog):
         # --- confirmation prompt ---
         confirm_view = ConfirmSealView()
         await interaction.followup.send(
-            f"**Review the results above.** Confirming will write {len(sealed_results)} sealed set(s) "
+            f"**Review the Cycle {cycle_number} results above.** Confirming will write {len(sealed_results)} sealed set(s) "
             "to the database and update spotlight roster flags. This cannot be undone.",
             view=confirm_view,
             ephemeral=True,
@@ -155,13 +162,16 @@ class ConfirmSeals(commands.Cog):
 
         proceed = await confirm_view.decision
         if not proceed:
-            await interaction.followup.send("❌ Aborted. No database changes were made.", ephemeral=True)
+            logger.info(f"{env_prefix}confirm-seals: Admin {interaction.user.name} REJECTED the confirmation prompt for Cycle {cycle_number}.")
+            await interaction.followup.send(f"❌ Aborted. No database changes were made for Cycle {cycle_number}.", ephemeral=True)
             return
 
         # --- transactional DB writes ---
         db_error = None
-        try:
-            logger.info(f"confirm-seals: {len(sealed_results)} sealed, {len(failed_results)} failed out of {len(results)} total")
+        
+        def execute_db_writes():
+            logger.info(f"{env_prefix}confirm-seals: Admin {interaction.user.name} SUBMITTED the confirmation prompt.")
+            logger.info(f"{env_prefix}confirm-seals: writing {len(sealed_results)} sealed, {len(failed_results)} failed out of {len(results)} total")
             if sealed_results:
                 sealed_for_db = []
                 for r in sealed_results:
@@ -170,35 +180,42 @@ class ConfirmSeals(commands.Cog):
                         {}
                     )
                     sealed_for_db.append({**original, "sealed": True})
-                logger.info(f"confirm-seals: Writing {len(sealed_for_db)} entries to sealed_sets")
+                logger.info(f"{env_prefix}confirm-seals: Writing {len(sealed_for_db)} entries to {self.db.collection_prefix}sealed_sets")
                 self.db.copy_to_sealed_sets(cycle_number, sealed_for_db)
             else:
-                logger.info("confirm-seals: No sealed results — skipping sealed_sets write.")
+                logger.info(f"{env_prefix}confirm-seals: No sealed results — skipping sealed_sets write.")
 
             # Update the sealed flag on each individual spotlight entry
             for result in results:
-                self.db.update_spotlight_entry(
-                    cycle_number,
-                    result["set_name"],
-                    {"sealed": result["sealed"]}
-                )
+                try:
+                    self.db.update_spotlight_entry(
+                        cycle_number,
+                        result["set_name"],
+                        {"sealed": result["sealed"]}
+                    )
+                except Exception as e:
+                    logger.error(f"confirm-seals: Failed to update spotlight entry '{result.get('set_name')}': {e}")
+                    raise
 
             # Transition cycle state to complete
             self.db.update_cycle(cycle_number, {"state": "complete", "is_active": False})
 
+        try:
+            await asyncio.to_thread(execute_db_writes)
         except Exception as e:
             logger.error(f"confirm-seals: DB write failed: {e}")
             db_error = e
 
+        env_prefix = "[TEST] " if self.db.collection_prefix else ""
         if db_error is None:
             await interaction.followup.send(
-                f"✅ Database updated. {len(sealed_results)} set(s) written to `sealed_sets`. "
+                f"✅ {env_prefix}Database updated for **Cycle {cycle_number}**. {len(sealed_results)} set(s) written to `{self.db.collection_prefix}sealed_sets`. "
                 "Spotlight roster flags updated. Cycle state set to **complete**.",
                 ephemeral=True
             )
         else:
             await interaction.followup.send(
-                f"❌ The evaluation is correct, but the database write failed: {db_error}\n"
+                f"❌ The evaluation for **Cycle {cycle_number}** is correct, but the database write failed: {db_error}\n"
                 "Please check the logs and re-run after resolving the issue.",
                 ephemeral=True
             )
