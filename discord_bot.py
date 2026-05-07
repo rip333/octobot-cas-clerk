@@ -65,6 +65,7 @@ async def setup_hook():
     await client.load_extension("cogs.view_seal_progress")
     await client.load_extension("cogs.view_seals")
     await client.load_extension("cogs.set_seal_drive_link")
+    await client.load_extension("cogs.withdraw_spotlight")
     await client.tree.sync()
     
     from mcp_firestore import MCPFirestore

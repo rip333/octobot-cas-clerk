@@ -185,8 +185,12 @@ def evaluate_set(form_id: str, entry: dict, gs: GoogleServices) -> dict:
     pass_rate = passing_reviews / num_reviews if num_reviews > 0 else 0.0
     avg_score = sum(weighted_scores) / num_reviews if num_reviews > 0 else None
 
+    is_withdrawn = entry.get("withdrawn", False)
+
     # Determine pass/fail and collect explicit failure reasons
     failure_reasons: list[str] = []
+    if is_withdrawn:
+        failure_reasons.append("Set was withdrawn from the Seal process by the creator")
     if num_reviews < MIN_REVIEWS:
         failure_reasons.append(
             f"Insufficient reviews: {num_reviews} submitted, {MIN_REVIEWS} required"
