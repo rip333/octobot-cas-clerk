@@ -29,11 +29,13 @@ class StartCycleModal(discord.ui.Modal, title='Start Cycle'):
         try:
             chosen_cycle = int(self.cycle_number.value)
         except ValueError:
+            logger.warning(f"Admin Action blocked: start-cycle aborted. Invalid cycle number entered: '{self.cycle_number.value}'")
             await interaction.followup.send("❌ Please enter a valid integer for the cycle number.", ephemeral=True)
             return
 
-        all_cycles = self.db.get_all_cycles()
-        if chosen_cycle in all_cycles:
+        existing_cycle = self.db.get_cycle(chosen_cycle)
+        if existing_cycle and existing_cycle.get("state") != "planning":
+            logger.warning(f"Admin Action blocked: start-cycle aborted. Cycle {chosen_cycle} already exists in DB and is not in 'planning' state.")
             await interaction.followup.send(f"❌ Cycle {chosen_cycle} already exists. Please pick a new number.", ephemeral=True)
             return
 
@@ -64,11 +66,11 @@ class StartCycleModal(discord.ui.Modal, title='Start Cycle'):
             if ineligible_text:
                 ineligible_str = "\n".join([f"- {item}" for item in ineligible_text])
                 ineligible_section = f"The following creators are ineligible for nomination (spotlighted last cycle):\n{ineligible_str}\n\n"
-        elif self.cycle_type == "redemption":
-            eligible_sets = self.db.get_unsealed_spotlights()
-            if eligible_sets:
-                eligible_str = "\n".join([f"- {item}" for item in sorted(eligible_sets)])
-                ineligible_section = f"The following sets are ELIGIBLE for nomination in this redemption cycle:\n{eligible_str}\n\n"
+        # elif self.cycle_type == "redemption":
+        #     eligible_sets = self.db.get_unsealed_spotlights()
+        #     if eligible_sets:
+        #         eligible_str = "\n".join([f"- {item}" for item in sorted(eligible_sets)])
+        #         ineligible_section = f"The following sets are ELIGIBLE for nomination in this redemption cycle:\n{eligible_str}\n\n"
             
         role = discord.utils.get(interaction.guild.roles, name="Community Seal Updates")
         role_mention = role.mention if role else "@Community Seal Updates"
@@ -76,19 +78,19 @@ class StartCycleModal(discord.ui.Modal, title='Start Cycle'):
         intro_text = (
             f"Hey {role_mention}!\n\n"
             f"Welcome to Cycle {chosen_cycle}! "
-            f"This thread will be used for nominations and voting for Cycle {chosen_cycle}!\n\n"
-            "-- NOMINATIONS: --\n\nYou may nominate 2 Hero sets and 1 Encounter (villain or leader) set.\n\n"
+            f"This thread will be used for nominations and voting for Cycle {chosen_cycle}!\n"
+            "\nYou may nominate 2 Hero sets and 1 Encounter (villain or leader) set.\n\n"
             "Please include \"hero\" or \"encounter\" in your nomination to specify which type of set you are nominating.\n\n"
         )
         
         if self.cycle_type == "redemption":
             intro_text += "**This is a Redemption Cycle!** Only sets that have been previously spotlighted but NOT sealed are eligible.\n"
-            intro_text += "You MAY nominate your own set.\n\n"
+            intro_text += "-- Self Nomination Only --\n\n"
         else:
             intro_text += "You may not nominate yourself.\n\n"
             
         intro_text += f"{ineligible_section}"
-        intro_text += "After nominations close, we will close nominations and begin voting.\n\n"
+        intro_text += "After nominations close, we will vote on the sets.\n\n"
 
         thread_name = f"Cycle {chosen_cycle} - Nominations and Voting"
 
@@ -108,6 +110,8 @@ class StartCycleModal(discord.ui.Modal, title='Start Cycle'):
         self.db.begin_cycle(thread.id)
         self.bot.nomination_thread_id = thread.id
         self.bot.nomination_state = "nominations"
+        
+        logger.info(f"Cycle {chosen_cycle} started successfully. State transitioned to 'nominations'. Created thread '{thread.name}' ({thread.id}).")
         
         await interaction.followup.send(f"✅ Started Cycle {chosen_cycle} in thread: {thread.mention}", ephemeral=True)
 
@@ -130,17 +134,22 @@ class CycleManagement(commands.Cog):
         metadata = self.db.get_cycle_metadata()
         current_state = metadata.get("state", "off")
         
-        if current_state != "planning":
-            await interaction.response.send_message("❌ **Invalid state.** This command can only be run when the cycle is in the `planning` state.", ephemeral=True)
+        if current_state not in ["planning", "complete"]:
+            logger.warning(f"Admin Action blocked: start-cycle aborted for {interaction.user.name} due to invalid state: {current_state}")
+            await interaction.response.send_message("❌ **Invalid state.** This command can only be run when the current cycle is in the `planning` or `complete` state.", ephemeral=True)
             return
             
         channel = interaction.channel
         if not isinstance(channel, (discord.TextChannel, discord.ForumChannel)):
+            logger.warning(f"Admin Action blocked: start-cycle aborted for {interaction.user.name} due to invalid channel type: {type(channel)}")
             await interaction.response.send_message("❌ **Invalid channel.** This command must be used in a text or forum channel to create the Nominations thread.", ephemeral=True)
             return
         
         current_cycle_number = int(metadata.get("number"))
-        next_cycle_number = current_cycle_number + 1
+        if current_state == "complete":
+            next_cycle_number = current_cycle_number + 1
+        else:
+            next_cycle_number = current_cycle_number
         
         modal = StartCycleModal(self.db, self.bot, current_cycle_number, next_cycle_number, channel, cycle_type.value)
         await interaction.response.send_modal(modal)
