@@ -72,7 +72,7 @@ class StartCycleModal(discord.ui.Modal, title='Start Cycle'):
                 eligible_str = "\n".join([f"- {item}" for item in sorted(eligible_sets)])
                 logger.info(f"The following sets are ELIGIBLE for nomination in this redemption cycle:\n{eligible_str}\n\n")
             
-        role = discord.utils.get(interaction.guild.role , name="Community Seal Updates")
+        role = discord.utils.get(interaction.guild.roles , name="Community Seal Updates")
         role_mention = role.mention if role else "@Community Seal Updates"
 
         intro_text = (

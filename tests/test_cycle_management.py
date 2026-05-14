@@ -12,6 +12,7 @@ def mock_bot():
 def mock_db():
     db = MagicMock()
     db.get_cycle_metadata.return_value = {"state": "planning", "number": 12}
+    db.get_cycle.return_value = {"state": "planning"}
     return db
 
 @pytest.fixture
@@ -87,62 +88,71 @@ async def test_start_cycle_success(mock_bot, mock_db, mock_interaction):
         assert modal.default_cycle_num == 12
         assert modal.cycle_type == "standard"
 
-# @pytest.mark.asyncio
-# async def test_modal_on_submit_standard(mock_bot, mock_db, mock_interaction):
-#     """Test that a standard cycle queries ineligible creators and formats the thread message."""
-#     mock_db.get_all_cycles.return_value = [10, 11]
-#     mock_db.get_ineligible_creators.return_value = (["HeroCreator"], ["EncounterCreator"])
+@pytest.mark.asyncio
+async def test_modal_on_submit_standard(mock_bot, mock_db, mock_interaction):
+    """Test that a standard cycle queries ineligible creators and formats the thread message."""
+    mock_db.get_all_cycles.return_value = [10, 11]
+    mock_db.get_ineligible_creators.return_value = (["HeroCreator"], ["EncounterCreator"])
     
-#     mock_interaction.response.defer = AsyncMock()
-#     mock_interaction.followup.send = AsyncMock()
-#     mock_interaction.guild = MagicMock()
-#     mock_interaction.guild.roles = []
+    mock_interaction.response.defer = AsyncMock()
+    mock_interaction.followup.send = AsyncMock()
+    mock_interaction.guild = MagicMock()
+    mock_interaction.guild.roles = []
     
-#     mock_thread = AsyncMock()
-#     mock_thread.id = 999
-#     mock_interaction.channel.create_thread.return_value = mock_thread
+    mock_thread = AsyncMock()
+    mock_thread.id = 999
+    mock_interaction.channel.create_thread.return_value = mock_thread
     
-#     modal = StartCycleModal(mock_db, mock_bot, 12, 13, mock_interaction.channel, "standard")
-#     modal.cycle_number._value = "12"
+    modal = StartCycleModal(mock_db, mock_bot, 12, 13, mock_interaction.channel, "standard")
+    modal.cycle_number._value = "12"
     
-#     await modal.on_submit(mock_interaction)
+    await modal.on_submit(mock_interaction)
     
-#     mock_db.get_ineligible_creators.assert_called_once_with(12)
-#     mock_db.get_unsealed_spotlights.assert_not_called()
+    mock_db.get_ineligible_creators.assert_called_once_with(12)
+    mock_db.get_unsealed_spotlights.assert_not_called()
     
-#     mock_interaction.channel.create_thread.assert_called_once()
-#     mock_thread.send.assert_called_once()
-#     sent_text = mock_thread.send.call_args[0][0]
-#     assert "The following creators are ineligible" in sent_text
-#     assert "HeroCreator" in sent_text
-#     assert "EncounterCreator" in sent_text
+    mock_interaction.channel.create_thread.assert_called_once()
+    mock_thread.send.assert_called_once()
+    sent_text = mock_thread.send.call_args[0][0]
+    assert "The following creators are ineligible" in sent_text
+    assert "HeroCreator" in sent_text
+    assert "EncounterCreator" in sent_text
 
-# @pytest.mark.asyncio
-# async def test_modal_on_submit_redemption(mock_bot, mock_db, mock_interaction):
-#     """Test that a redemption cycle queries eligible sets and formats the thread message."""
-#     mock_db.get_all_cycles.return_value = [10, 11]
-#     mock_db.get_unsealed_spotlights.return_value = ["Set A", "Set B"]
+@pytest.mark.asyncio
+async def test_modal_on_submit_redemption(mock_bot, mock_db, mock_interaction):
+    """Test that a redemption cycle queries eligible sets and formats the thread message."""
+    mock_db.get_all_cycles.return_value = [10, 11]
+    mock_db.get_unsealed_spotlights.return_value = ["Set A", "Set B"]
     
-#     mock_interaction.response.defer = AsyncMock()
-#     mock_interaction.followup.send = AsyncMock()
-#     mock_interaction.guild = MagicMock()
-#     mock_interaction.guild.roles = []
+    mock_interaction.response.defer = AsyncMock()
+    mock_interaction.followup.send = AsyncMock()
+    mock_interaction.guild = MagicMock()
+    mock_interaction.guild.roles = []
     
-#     mock_thread = AsyncMock()
-#     mock_thread.id = 999
-#     mock_interaction.channel.create_thread.return_value = mock_thread
+    mock_thread = AsyncMock()
+    mock_thread.id = 999
+    mock_interaction.channel.create_thread.return_value = mock_thread
     
-#     modal = StartCycleModal(mock_db, mock_bot, 12, 13, mock_interaction.channel, "redemption")
-#     modal.cycle_number._value = "12"
+    modal = StartCycleModal(mock_db, mock_bot, 12, 13, mock_interaction.channel, "redemption")
+    modal.cycle_number._value = "12"
     
-#     await modal.on_submit(mock_interaction)
+    with patch('cogs.cycle_management.logger') as mock_logger:
+        await modal.on_submit(mock_interaction)
     
-#     mock_db.get_unsealed_spotlights.assert_called_once()
-#     mock_db.get_ineligible_creators.assert_not_called()
+    mock_db.get_unsealed_spotlights.assert_called_once()
+    mock_db.get_ineligible_creators.assert_not_called()
     
-#     mock_interaction.channel.create_thread.assert_called_once()
-#     mock_thread.send.assert_called_once()
-#     sent_text = mock_thread.send.call_args[0][0]
-#     assert "The following sets are ELIGIBLE" in sent_text
-#     assert "Set A" in sent_text
-#     assert "Set B" in sent_text
+    mock_interaction.channel.create_thread.assert_called_once()
+    mock_thread.send.assert_called_once()
+    sent_text = mock_thread.send.call_args[0][0]
+    
+    assert "**This is a Redemption Cycle!**" in sent_text
+    assert "-- Self Nomination Only --" in sent_text
+    
+    # Check that logger was called with the eligible sets
+    assert mock_logger.info.call_count > 0
+    logger_calls = [call[0][0] for call in mock_logger.info.call_args_list]
+    eligible_log = next((call for call in logger_calls if "ELIGIBLE for nomination" in call), None)
+    assert eligible_log is not None
+    assert "Set A" in eligible_log
+    assert "Set B" in eligible_log
