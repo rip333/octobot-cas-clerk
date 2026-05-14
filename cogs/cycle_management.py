@@ -52,27 +52,27 @@ class StartCycleModal(discord.ui.Modal, title='Start Cycle'):
         }
         self.db.db.collection(self.db.collection_prefix + 'cycles').document(str(chosen_cycle)).set(default_cycle)
 
-        # Proceed with start logic using chosen_cycle
-        # ineligible_section = ""
-        # if self.cycle_type == "standard":
-        #     hero_creators, encounter_creators = self.db.get_ineligible_creators(chosen_cycle)
+        #Proceed with start logic using chosen_cycle
+        ineligible_section = ""
+        if self.cycle_type == "standard":
+            hero_creators, encounter_creators = self.db.get_ineligible_creators(chosen_cycle)
             
-        #     ineligible_text = []
-        #     if hero_creators:
-        #         ineligible_text.append(f"**Heroes**: {', '.join(sorted(hero_creators))}")
-        #     if encounter_creators:
-        #         ineligible_text.append(f"**Encounters**: {', '.join(sorted(encounter_creators))}")
+            ineligible_text = []
+            if hero_creators:
+                ineligible_text.append(f"**Heroes**: {', '.join(sorted(hero_creators))}")
+            if encounter_creators:
+                ineligible_text.append(f"**Encounters**: {', '.join(sorted(encounter_creators))}")
                 
-        #     if ineligible_text:
-        #         ineligible_str = "\n".join([f"- {item}" for item in ineligible_text])
-        #         ineligible_section = f"The following creators are ineligible for nomination (spotlighted last cycle):\n{ineligible_str}\n\n"
-        # # elif self.cycle_type == "redemption":
-        # #     eligible_sets = self.db.get_unsealed_spotlights()
-        # #     if eligible_sets:
-        # #         eligible_str = "\n".join([f"- {item}" for item in sorted(eligible_sets)])
-        # #         ineligible_section = f"The following sets are ELIGIBLE for nomination in this redemption cycle:\n{eligible_str}\n\n"
+            if ineligible_text:
+                ineligible_str = "\n".join([f"- {item}" for item in ineligible_text])
+                ineligible_section = f"The following creators are ineligible for nomination (spotlighted last cycle):\n{ineligible_str}\n\n"
+        elif self.cycle_type == "redemption":
+            eligible_sets = self.db.get_unsealed_spotlights()
+            if eligible_sets:
+                eligible_str = "\n".join([f"- {item}" for item in sorted(eligible_sets)])
+                logger.info(f"The following sets are ELIGIBLE for nomination in this redemption cycle:\n{eligible_str}\n\n")
             
-        role = discord.utils.get(interaction.guild.roles, name="Community Seal Updates")
+        role = discord.utils.get(interaction.guild.role , name="Community Seal Updates")
         role_mention = role.mention if role else "@Community Seal Updates"
 
         intro_text = (
