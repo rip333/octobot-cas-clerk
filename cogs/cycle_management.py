@@ -78,15 +78,17 @@ class StartCycleModal(discord.ui.Modal, title='Start Cycle'):
         intro_text = (
             f"Hey {role_mention}!\n\n"
             f"Welcome to Cycle {chosen_cycle}! "
-            f"This thread will be used for nominations and voting for Cycle {chosen_cycle}!\n"
-            "\nYou may nominate 2 Hero sets and 1 Encounter (villain or leader) set.\n\n"
-            "Please include \"hero\" or \"encounter\" in your nomination to specify which type of set you are nominating.\n\n"
+            f"This thread will be used for nominations and voting for Cycle {chosen_cycle}!\n\n"
         )
         
         if self.cycle_type == "redemption":
             intro_text += "**This is a Redemption Cycle!** Only sets that have been previously spotlighted but NOT sealed are eligible.\n"
+            intro_text += "You may nominate 1 set (regardless of type).\n"
+            intro_text += "Please include \"hero\" or \"encounter\" in your nomination to specify which type of set you are nominating.\n"
             intro_text += "-- Self Nomination Only --\n\n"
         else:
+            intro_text += "You may nominate 2 Hero sets and 1 Encounter (villain or leader) set.\n\n"
+            intro_text += "Please include \"hero\" or \"encounter\" in your nomination to specify which type of set you are nominating.\n\n"
             intro_text += "You may not nominate yourself.\n\n"
             
         intro_text += f"{ineligible_section}"
@@ -97,7 +99,6 @@ class StartCycleModal(discord.ui.Modal, title='Start Cycle'):
         thread = await self.channel.create_thread(
             name=thread_name,
             type=discord.ChannelType.public_thread,
-            slowmode_delay=60,
             auto_archive_duration=10080
         )
         
